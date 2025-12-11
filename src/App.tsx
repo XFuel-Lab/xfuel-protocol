@@ -16,6 +16,14 @@ const TOKENS: Token[] = [
   { symbol: 'pSTAKE BTC', name: 'pStake Bitcoin', balance: '0.00', price: '$42,180', icon: '₿' },
 ]
 
+declare global {
+  interface Window {
+    thetaWallet?: {
+      request: (args: { method: string }) => Promise<string[]>
+    }
+  }
+}
+
 function App() {
   const [isConnected, setIsConnected] = useState(false)
   const [walletAddress, setWalletAddress] = useState<string>('')
@@ -31,7 +39,7 @@ function App() {
   // Check if Theta Wallet is available
   useEffect(() => {
     const checkWallet = () => {
-      if (typeof window !== 'undefined' && (window as any).thetaWallet) {
+      if (typeof window !== 'undefined' && window.thetaWallet) {
         // Wallet is available
       }
     }
@@ -40,8 +48,8 @@ function App() {
 
   const connectWallet = async () => {
     try {
-      if (typeof window !== 'undefined' && (window as any).thetaWallet) {
-        const wallet = (window as any).thetaWallet
+      if (typeof window !== 'undefined' && window.thetaWallet) {
+        const wallet = window.thetaWallet
         const accounts = await wallet.request({ method: 'eth_requestAccounts' })
         if (accounts && accounts.length > 0) {
           setWalletAddress(accounts[0])

@@ -1,4 +1,5 @@
 require('@nomicfoundation/hardhat-toolbox')
+require('dotenv').config()
 
 /** @type {import('hardhat/config').HardhatUserConfig} */
 module.exports = {
@@ -15,6 +16,11 @@ module.exports = {
     hardhat: {
       chainId: 1337,
     },
+    thetaTestnet: {
+      url: 'https://eth-rpc-api-testnet.thetatoken.org/rpc',
+      chainId: 365,
+      accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
+    },
   },
   paths: {
     sources: './contracts',
@@ -26,3 +32,4 @@ module.exports = {
     timeout: 40000,
   },
 }
+

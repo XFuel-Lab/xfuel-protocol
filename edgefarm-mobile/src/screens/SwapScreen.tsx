@@ -1,27 +1,44 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { Pressable, Text, TextInput, View } from 'react-native'
+import { Linking, Pressable, Text, TextInput, View } from 'react-native'
 import { SafeAreaView } from 'react-native-safe-area-context'
+import { Ionicons } from '@expo/vector-icons'
 import { ScreenBackground } from '../components/ScreenBackground'
 import { NeonCard } from '../components/NeonCard'
 import { NeonButton } from '../components/NeonButton'
 import { neon } from '../theme/neon'
 import { connectThetaWalletMock, createDisconnectedWallet } from '../lib/mockWallet'
-import { NeonPill } from '../components/NeonPill'
 import { type } from '../theme/typography'
 import * as Haptics from 'expo-haptics'
-import { TipSuccessOverlay } from '../components/TipSuccessOverlay'
+import { SlideUpSheet } from '../components/SlideUpSheet'
 
-const LSTS = ['stkXPRT', 'stkATOM', 'pSTAKE BTC'] as const
+const LSTS = ['stkXPRT', 'stkTIA', 'pSTAKE BTC', 'stkATOM'] as const
+type LST = (typeof LSTS)[number]
+type PctOption = 25 | 50 | 75 | 100 | 'custom'
+type Phase = 'idle' | 'approving' | 'swapping'
+
+const APY_BY_LST: Record<LST, number> = {
+  stkXPRT: 38.7,
+  stkTIA: 48.2,
+  'pSTAKE BTC': 32.1,
+  stkATOM: 25.4,
+}
 
 export function SwapScreen() {
   const [wallet, setWallet] = useState(createDisconnectedWallet())
-  const [tfuelAmount, setTfuelAmount] = useState('')
-  const [selectedLST, setSelectedLST] = useState<(typeof LSTS)[number]>('stkATOM')
+  const [selectedLST, setSelectedLST] = useState<LST>('stkTIA')
+  const [pctOption, setPctOption] = useState<PctOption>(50)
+  const [customPct, setCustomPct] = useState('60')
 
   const [finalityMs, setFinalityMs] = useState(3200)
   const [status, setStatus] = useState<string>('')
-  const [successVisible, setSuccessVisible] = useState(false)
-  const [successMsg, setSuccessMsg] = useState('')
+  const [phase, setPhase] = useState<Phase>('idle')
+  const [approved, setApproved] = useState(false)
+  const [percentOpen, setPercentOpen] = useState(false)
+  const [lstOpen, setLstOpen] = useState(false)
+  const [moreLstsOpen, setMoreLstsOpen] = useState(false)
+
+  const [successOpen, setSuccessOpen] = useState(false)
+  const [successDetails, setSuccessDetails] = useState<{ finality: string; explorerUrl: string } | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => {
@@ -43,41 +60,74 @@ export function SwapScreen() {
     setTimeout(() => setStatus(''), 1200)
   }
 
-  const setPresetPct = (pct: 25 | 50 | 100) => {
-    if (!wallet.isConnected) return
-    const amount = (wallet.balanceTfuel * pct) / 100
-    setTfuelAmount(amount.toFixed(2))
-  }
+  const pctValue = useMemo(() => {
+    if (pctOption !== 'custom') return pctOption
+    const n = Math.round(parseFloat(customPct || '0') || 0)
+    return Math.max(0, Math.min(100, n))
+  }, [pctOption, customPct])
 
-  const onMax = () => {
-    if (!wallet.isConnected) return
-    setTfuelAmount(wallet.balanceTfuel.toFixed(2))
-  }
+  const tfuelAmount = useMemo(() => {
+    if (!wallet.isConnected) return 0
+    return (wallet.balanceTfuel * pctValue) / 100
+  }, [wallet.balanceTfuel, wallet.isConnected, pctValue])
 
-  const approve = async () => {
-    if (!wallet.isConnected || !tfuelAmount) {
-      setStatus('Connect wallet and enter amount')
+  const receiveEstimate = useMemo(() => {
+    // Mock: 1 TFUEL -> 1 LST unit; round to 2 decimals
+    return tfuelAmount
+  }, [tfuelAmount])
+
+  const receivePreview = useMemo(() => {
+    const apy = APY_BY_LST[selectedLST]
+    return `You’ll receive ~${receiveEstimate.toFixed(2)} ${selectedLST} (${apy.toFixed(1)}%)`
+  }, [receiveEstimate, selectedLST])
+
+  const doSwap = () => {
+    if (!wallet.isConnected) {
+      setStatus('Connect wallet first')
       return
     }
-    setStatus('Approving TFUEL…')
-    setTimeout(() => setStatus('Approval successful ✓'), 900)
-    setTimeout(() => setStatus(''), 2100)
-  }
-
-  const swapAndStake = async () => {
-    if (!wallet.isConnected || !tfuelAmount) {
-      setStatus('Connect wallet and enter amount')
+    if (pctValue <= 0 || tfuelAmount <= 0) {
+      setStatus('Choose an amount to swap')
       return
     }
-    const amount = tfuelAmount
-    setStatus(`Swapping ${tfuelAmount} TFUEL → ${selectedLST}… (demo)`)
+    setPhase('swapping')
+    setStatus(`Swapping ${tfuelAmount.toFixed(2)} TFUEL → ${selectedLST}… (demo)`)
+
+    const finalitySnapshot = finalityText
+    const explorerUrl = 'https://explorer.thetatoken.org/' // placeholder
+
     setTimeout(() => {
-      setStatus(`Done! You now hold yield-bearing ${selectedLST}`)
-      setTfuelAmount('')
-      setSuccessMsg(`Swap complete: ${amount} TFUEL → ${selectedLST}`)
-      setSuccessVisible(true)
-    }, 1200)
-    setTimeout(() => setStatus(''), 4200)
+      setPhase('idle')
+      setStatus('')
+      setSuccessDetails({ finality: finalitySnapshot, explorerUrl })
+      setSuccessOpen(true)
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {})
+    }, 1100)
+  }
+
+  const swapAndStake = () => {
+    if (!wallet.isConnected) {
+      setStatus('Connect wallet first')
+      return
+    }
+    if (pctValue <= 0 || tfuelAmount <= 0) {
+      setStatus('Choose an amount to swap')
+      return
+    }
+
+    if (!approved) {
+      setPhase('approving')
+      setStatus('Approving…')
+      setTimeout(() => {
+        setApproved(true)
+        setPhase('idle')
+        setStatus('')
+        doSwap()
+      }, 800)
+      return
+    }
+
+    doSwap()
   }
 
   return (
@@ -86,10 +136,9 @@ export function SwapScreen() {
         <View className="px-5 pt-3">
           <View className="flex-row items-center justify-between">
             <Text style={{ ...type.h2, color: 'rgba(255,255,255,0.95)' }}>Swap & Stake</Text>
-            <NeonPill label="Gas-free" tone="blue" />
           </View>
           <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>
-            Mobile-optimized XFUEL swap flow
+            Modern swap experience · clean selectors
           </Text>
         </View>
 
@@ -118,89 +167,89 @@ export function SwapScreen() {
           </NeonCard>
 
           <NeonCard className="mb-5">
-            <View className="flex-row items-center justify-between">
-              <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>TFUEL input</Text>
-              <NeonPill label={`Finality ${finalityText}`} tone="green" />
-            </View>
+            <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>Swap settings</Text>
+            <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>
+              Choose your balance share and target LST.
+            </Text>
 
-            <View className="mt-3 flex-row gap-2">
-              <View
-                className="flex-1 rounded-xl border px-3 py-3"
-                style={{ borderColor: 'rgba(168,85,247,0.28)', backgroundColor: 'rgba(255,255,255,0.04)' }}
-              >
-                <TextInput
-                  value={tfuelAmount}
-                  onChangeText={setTfuelAmount}
-                  editable={wallet.isConnected}
-                  placeholder="0.00"
-                  placeholderTextColor={'rgba(255,255,255,0.35)'}
-                  keyboardType="decimal-pad"
-                  style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}
-                />
-                <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.45)' }}>TFUEL</Text>
-              </View>
-
+            <View style={{ marginTop: 14, flexDirection: 'row', gap: 12 }}>
+              {/* % dropdown */}
               <Pressable
-                onPress={onMax}
-                disabled={!wallet.isConnected}
-                className="rounded-xl border px-4 py-3"
-                style={{ borderColor: 'rgba(56,189,248,0.30)', backgroundColor: 'rgba(56,189,248,0.10)' }}
+                onPress={() => setPercentOpen(true)}
+                disabled={!wallet.isConnected || phase !== 'idle'}
+                style={{
+                  flex: 1,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.12)',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                }}
               >
-                <Text style={{ ...type.bodyM, color: neon.blue }}>MAX</Text>
-                <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>balance</Text>
+                <Text style={{ ...type.caption, color: 'rgba(255,255,255,0.55)' }}>% of balance</Text>
+                <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>
+                    {pctOption === 'custom' ? `Custom (${pctValue}%)` : `${pctOption}%`}
+                  </Text>
+                  <Ionicons name="chevron-down" size={18} color="rgba(255,255,255,0.65)" />
+                </View>
+                <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.45)' }}>
+                  {wallet.isConnected ? `${tfuelAmount.toFixed(2)} TFUEL` : '—'}
+                </Text>
+              </Pressable>
+
+              {/* LST dropdown */}
+              <Pressable
+                onPress={() => setLstOpen(true)}
+                disabled={phase !== 'idle'}
+                style={{
+                  flex: 1,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255,255,255,0.12)',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  paddingHorizontal: 12,
+                  paddingVertical: 12,
+                }}
+              >
+                <Text style={{ ...type.caption, color: 'rgba(255,255,255,0.55)' }}>Target LST</Text>
+                <View style={{ marginTop: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>{selectedLST}</Text>
+                  <Ionicons name="chevron-down" size={18} color="rgba(255,255,255,0.65)" />
+                </View>
+                <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.45)' }}>
+                  {APY_BY_LST[selectedLST].toFixed(1)}% APY
+                </Text>
               </Pressable>
             </View>
 
-            <View className="mt-3 flex-row gap-2">
-              {[25, 50, 100].map((pct) => (
-                <Pressable
-                  key={pct}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {})
-                    setPresetPct(pct as 25 | 50 | 100)
+            {pctOption === 'custom' ? (
+              <View style={{ marginTop: 12 }}>
+                <Text style={{ ...type.caption, color: 'rgba(255,255,255,0.55)' }}>Custom percent (0–100)</Text>
+                <View
+                  style={{
+                    marginTop: 8,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: 'rgba(255,255,255,0.12)',
+                    backgroundColor: 'rgba(255,255,255,0.04)',
+                    paddingHorizontal: 12,
+                    paddingVertical: 12,
                   }}
-                  disabled={!wallet.isConnected}
-                  className="flex-1 rounded-xl border px-3 py-3"
-                  style={{ borderColor: 'rgba(168,85,247,0.22)', backgroundColor: 'rgba(168,85,247,0.08)' }}
                 >
-                  <Text style={{ ...type.bodyM, textAlign: 'center', color: 'rgba(255,255,255,0.88)' }}>{pct}%</Text>
-                  <Text style={{ ...type.caption, marginTop: 4, textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
-                    preset
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-
-            <Text style={{ ...type.caption, marginTop: 16, color: 'rgba(255,255,255,0.55)' }}>CHOSEN LST</Text>
-            <View className="mt-2 flex-row gap-2">
-              {LSTS.map((lst) => {
-                const active = lst === selectedLST
-                return (
-                  <Pressable
-                    key={lst}
-                    onPress={() => {
-                      Haptics.selectionAsync().catch(() => {})
-                      setSelectedLST(lst)
-                    }}
-                    className="flex-1 rounded-xl border px-3 py-3"
-                    style={{
-                      borderColor: active ? 'rgba(56,189,248,0.55)' : 'rgba(168,85,247,0.22)',
-                      backgroundColor: active ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.03)',
-                    }}
-                  >
-                    <Text style={{ ...type.bodyM, textAlign: 'center', color: active ? neon.blue : 'rgba(255,255,255,0.60)' }}>{lst}</Text>
-                    <Text style={{ ...type.caption, marginTop: 4, textAlign: 'center', color: 'rgba(255,255,255,0.45)' }}>
-                      tap to select
-                    </Text>
-                  </Pressable>
-                )
-              })}
-            </View>
-
-            <View className="mt-4 flex-row flex-wrap gap-2">
-              <NeonPill label="Paid by treasury" tone="purple" />
-              <NeonPill label="Instant settlement" tone="blue" />
-            </View>
+                  <TextInput
+                    value={customPct}
+                    onChangeText={setCustomPct}
+                    editable={wallet.isConnected && phase === 'idle'}
+                    keyboardType="number-pad"
+                    placeholder="60"
+                    placeholderTextColor={'rgba(255,255,255,0.35)'}
+                    style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}
+                  />
+                </View>
+              </View>
+            ) : null}
           </NeonCard>
 
           {status ? (
@@ -211,28 +260,159 @@ export function SwapScreen() {
             </View>
           ) : null}
 
-          <View className="gap-3" style={{ paddingBottom: 92 }}>
-            <NeonButton
-              label="Approve TFUEL"
-              onPress={approve}
-              disabled={!wallet.isConnected || !tfuelAmount}
-              rightHint="1/2"
-            />
-            <NeonButton
-              label={`Swap & Stake → ${selectedLST}`}
-              onPress={swapAndStake}
-              disabled={!wallet.isConnected || !tfuelAmount}
-              rightHint="2/2"
-            />
+          <View style={{ paddingBottom: 92 }}>
+            <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.75)' }}>{receivePreview}</Text>
+            <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.50)' }}>
+              Estimates are mock values in this demo.
+            </Text>
+
+            <View style={{ marginTop: 12 }}>
+              <NeonButton
+                label={phase === 'approving' ? 'Approving…' : phase === 'swapping' ? 'Swapping…' : 'Swap & Stake'}
+                onPress={swapAndStake}
+                disabled={!wallet.isConnected || phase !== 'idle' || pctValue <= 0}
+                rightHint={wallet.isConnected ? `${tfuelAmount.toFixed(2)} TFUEL` : undefined}
+              />
+            </View>
           </View>
         </View>
       </SafeAreaView>
 
-      <TipSuccessOverlay
-        visible={successVisible}
-        message={successMsg}
-        onClose={() => setSuccessVisible(false)}
-      />
+      {/* % dropdown sheet */}
+      <SlideUpSheet visible={percentOpen} onClose={() => setPercentOpen(false)}>
+        <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>Choose % of balance</Text>
+        <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>Quick select or custom.</Text>
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {[25, 50, 75, 100].map((p) => (
+            <Pressable
+              key={p}
+              onPress={() => {
+                setPctOption(p as 25 | 50 | 75 | 100)
+                setPercentOpen(false)
+              }}
+              style={{
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: pctOption === p ? 'rgba(56,189,248,0.30)' : 'rgba(255,255,255,0.12)',
+                backgroundColor: pctOption === p ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.04)',
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+              }}
+            >
+              <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>{p}%</Text>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => {
+              setPctOption('custom')
+              setPercentOpen(false)
+            }}
+            style={{
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: pctOption === 'custom' ? 'rgba(56,189,248,0.30)' : 'rgba(255,255,255,0.12)',
+              backgroundColor: pctOption === 'custom' ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.04)',
+              paddingHorizontal: 12,
+              paddingVertical: 12,
+            }}
+          >
+            <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>Custom</Text>
+          </Pressable>
+        </View>
+      </SlideUpSheet>
+
+      {/* LST dropdown sheet */}
+      <SlideUpSheet visible={lstOpen} onClose={() => setLstOpen(false)}>
+        <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>Choose target LST</Text>
+        <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>Pick the yield you want.</Text>
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {LSTS.map((lst) => (
+            <Pressable
+              key={lst}
+              onPress={() => {
+                setSelectedLST(lst)
+                setLstOpen(false)
+              }}
+              style={{
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: selectedLST === lst ? 'rgba(56,189,248,0.30)' : 'rgba(255,255,255,0.12)',
+                backgroundColor: selectedLST === lst ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.04)',
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+              }}
+            >
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>{lst}</Text>
+                <Text style={{ ...type.caption, color: 'rgba(255,255,255,0.65)' }}>{APY_BY_LST[lst].toFixed(1)}%</Text>
+              </View>
+            </Pressable>
+          ))}
+          <Pressable
+            onPress={() => {
+              setLstOpen(false)
+              setMoreLstsOpen(true)
+            }}
+            style={{
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: 'rgba(255,255,255,0.12)',
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              paddingHorizontal: 12,
+              paddingVertical: 12,
+            }}
+          >
+            <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>More…</Text>
+          </Pressable>
+        </View>
+      </SlideUpSheet>
+
+      {/* More LSTs sheet (placeholder full list) */}
+      <SlideUpSheet visible={moreLstsOpen} onClose={() => setMoreLstsOpen(false)}>
+        <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>All LSTs</Text>
+        <Text style={{ ...type.caption, marginTop: 6, color: 'rgba(255,255,255,0.55)' }}>Mock list for now.</Text>
+        <View style={{ marginTop: 12, gap: 10 }}>
+          {[...LSTS].map((lst) => (
+            <Pressable
+              key={`all-${lst}`}
+              onPress={() => {
+                setSelectedLST(lst)
+                setMoreLstsOpen(false)
+              }}
+              style={{
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: selectedLST === lst ? 'rgba(56,189,248,0.30)' : 'rgba(255,255,255,0.12)',
+                backgroundColor: selectedLST === lst ? 'rgba(56,189,248,0.10)' : 'rgba(255,255,255,0.04)',
+                paddingHorizontal: 12,
+                paddingVertical: 12,
+              }}
+            >
+              <Text style={{ ...type.bodyM, color: 'rgba(255,255,255,0.92)' }}>{lst}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </SlideUpSheet>
+
+      {/* Success slide-up popup */}
+      <SlideUpSheet visible={successOpen} onClose={() => setSuccessOpen(false)}>
+        <Text style={{ ...type.h3, color: 'rgba(255,255,255,0.95)' }}>Swap complete!</Text>
+        <Text style={{ ...type.bodyM, marginTop: 8, color: 'rgba(255,255,255,0.75)' }}>
+          Gas sponsored by XFUEL treasury · Finality in {successDetails?.finality ?? finalityText}
+        </Text>
+        <Pressable
+          onPress={() => {
+            const url = successDetails?.explorerUrl
+            if (url) Linking.openURL(url).catch(() => {})
+          }}
+          style={{ marginTop: 14, borderRadius: 16, borderWidth: 1, borderColor: 'rgba(56,189,248,0.22)', paddingHorizontal: 12, paddingVertical: 12 }}
+        >
+          <Text style={{ ...type.bodyM, color: neon.blue }}>View on explorer</Text>
+        </Pressable>
+        <Text style={{ ...type.caption, marginTop: 10, color: 'rgba(255,255,255,0.45)' }}>
+          Explorer link is a placeholder in this demo.
+        </Text>
+      </SlideUpSheet>
     </ScreenBackground>
   )
 }

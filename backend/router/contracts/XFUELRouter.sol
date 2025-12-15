@@ -63,10 +63,11 @@ contract XFUELRouter is Ownable {
         require(amount > 0, "Amount must be greater than 0");
         require(bytes(targetLST).length > 0, "Target LST cannot be empty");
 
-        // Transfer TFUEL from router to this contract (router should have balance)
-        // In production, this would integrate with actual swap/stake contracts
+        // Transfer TFUEL from router contract to the user
+        // The router contract should hold TFUEL balance (deposited via receive() or other methods)
+        // In production, this would integrate with actual swap/stake contracts to convert TFUEL to LST
         require(
-            IERC20(TFUEL).transferFrom(address(this), address(this), amount),
+            IERC20(TFUEL).transfer(user, amount),
             "TFUEL transfer failed"
         );
 

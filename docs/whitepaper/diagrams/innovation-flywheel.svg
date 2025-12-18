@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1000" height="1000" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Grid pattern -->
+    <pattern id="grid" width="50" height="50" patternUnits="userSpaceOnUse">
+      <path d="M 50 0 L 0 0 0 50" fill="none" stroke="#00ffff" stroke-width="1" opacity="0.1"/>
+    </pattern>
+    
+    <!-- Neon glow filters -->
+    <filter id="neon-pink">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="neon-cyan">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="neon-green">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <filter id="neon-purple">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    
+    <marker id="arrow-cyan" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#00ffff"/>
+    </marker>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="1000" height="1000" fill="#0a0a0a"/>
+  <rect width="1000" height="1000" fill="url(#grid)"/>
+  
+  <!-- Title -->
+  <text x="500" y="50" font-family="Orbitron, sans-serif" font-size="36" font-weight="bold" 
+        fill="#00ff41" text-anchor="middle" filter="url(#neon-green)">
+    Innovation Flywheel
+  </text>
+  
+  <!-- Circular flow arrows -->
+  <path d="M 800 500 A 300 300 0 0 1 500 800" 
+          fill="none" stroke="#00ffff" stroke-width="4" 
+          filter="url(#neon-cyan)" 
+          marker-end="url(#arrow-cyan)"/>
+  <path d="M 500 800 A 300 300 0 0 1 200 500.00000000000006" 
+          fill="none" stroke="#ff00ff" stroke-width="4" 
+          filter="url(#neon-pink)" 
+          marker-end="url(#arrow-cyan)"/>
+  <path d="M 200 500.00000000000006 A 300 300 0 0 1 499.99999999999994 200" 
+          fill="none" stroke="#00ff41" stroke-width="4" 
+          filter="url(#neon-green)" 
+          marker-end="url(#arrow-cyan)"/>
+  <path d="M 499.99999999999994 200 A 300 300 0 1 1 712.1320343559643 712.1320343559643" 
+          fill="none" stroke="#b026ff" stroke-width="4" 
+          filter="url(#neon-purple)" 
+          marker-end="url(#arrow-cyan)"/>
+  <path d="M 712.1320343559643 712.1320343559643 A 300 300 0 0 1 800 500" 
+          fill="none" stroke="#00ffff" stroke-width="4" 
+          filter="url(#neon-cyan)" 
+          marker-end="url(#arrow-cyan)"/>
+  <g id="revenue-box">
+    <rect x="720" y="460" width="160" height="80" rx="12" 
+          fill="rgba(255, 255, 255, 0.03)" stroke="#00ffff" stroke-width="3" 
+          filter="url(#neon-cyan)" 
+          opacity="0.9"/>
+    <text x="800" y="505" font-family="Orbitron, sans-serif" font-size="18" font-weight="bold" 
+          fill="#00ffff" text-anchor="middle" 
+          filter="url(#neon-cyan)">Revenue</text>
+  </g>
+  <g id="treasury-box">
+    <rect x="420" y="160" width="160" height="80" rx="12" 
+          fill="rgba(255, 255, 255, 0.03)" stroke="#ff00ff" stroke-width="3" 
+          filter="url(#neon-pink)" 
+          opacity="0.9"/>
+    <text x="500" y="205" font-family="Orbitron, sans-serif" font-size="18" font-weight="bold" 
+          fill="#ff00ff" text-anchor="middle" 
+          filter="url(#neon-pink)">Treasury</text>
+  </g>
+  <g id="vaults-box">
+    <rect x="120" y="460" width="160" height="80" rx="12" 
+          fill="rgba(255, 255, 255, 0.03)" stroke="#00ff41" stroke-width="3" 
+          filter="url(#neon-green)" 
+          opacity="0.9"/>
+    <text x="200" y="505" font-family="Orbitron, sans-serif" font-size="18" font-weight="bold" 
+          fill="#00ff41" text-anchor="middle" 
+          filter="url(#neon-green)">Vaults</text>
+  </g>
+  <g id="spin-outs-box">
+    <rect x="420" y="760" width="160" height="80" rx="12" 
+          fill="rgba(255, 255, 255, 0.03)" stroke="#b026ff" stroke-width="3" 
+          filter="url(#neon-purple)" 
+          opacity="0.9"/>
+    <text x="500" y="805" font-family="Orbitron, sans-serif" font-size="18" font-weight="bold" 
+          fill="#b026ff" text-anchor="middle" 
+          filter="url(#neon-purple)">Spin-outs</text>
+  </g>
+  <g id="tvl-growth-box">
+    <rect x="632.1320343559643" y="672.1320343559643" width="160" height="80" rx="12" 
+          fill="rgba(255, 255, 255, 0.03)" stroke="#00ffff" stroke-width="3" 
+          filter="url(#neon-cyan)" 
+          opacity="0.9"/>
+    <text x="712.1320343559643" y="717.1320343559643" font-family="Orbitron, sans-serif" font-size="18" font-weight="bold" 
+          fill="#00ffff" text-anchor="middle" 
+          filter="url(#neon-cyan)">TVL Growth</text>
+  </g>
+</svg>

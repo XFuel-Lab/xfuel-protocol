@@ -136,12 +136,22 @@ function convertMarkdownToHTML(markdown, styles) {
   html = html.replace(/\[DIAGRAM: (.*?)\]/g, (match, displayName) => {
     // Get file name from map, or generate from display name
     const fileName = diagramMap[displayName] || displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-');
-    const diagramPath = path.join(__dirname, 'diagrams', `${fileName}.png`);
-    const diagramExists = fs.existsSync(diagramPath);
     
-    if (diagramExists) {
+    // Try SVG first, then PNG
+    const svgPath = path.join(__dirname, 'diagrams', `${fileName}.svg`);
+    const pngPath = path.join(__dirname, 'diagrams', `${fileName}.png`);
+    const svgExists = fs.existsSync(svgPath);
+    const pngExists = fs.existsSync(pngPath);
+    
+    if (svgExists) {
+      // Read SVG and embed directly (better for PDF)
+      const svgContent = fs.readFileSync(svgPath, 'utf-8');
+      // Extract just the SVG content (remove XML declaration if present)
+      const svgBody = svgContent.replace(/<\?xml[^>]*\?>\s*/i, '');
+      return `<div class="diagram-container"><div class="diagram-title">${displayName}</div><div style="width: 100%; display: flex; justify-content: center;">${svgBody}</div></div>`;
+    } else if (pngExists) {
       // Use absolute path for Puppeteer
-      const absolutePath = path.resolve(diagramPath);
+      const absolutePath = path.resolve(pngPath);
       return `<div class="diagram-container"><div class="diagram-title">${displayName}</div><img src="file:///${absolutePath.replace(/\\/g, '/')}" alt="${displayName}" style="width: 100%; max-width: 100%; height: auto;" /></div>`;
     } else {
       return `<div class="diagram-container"><div class="diagram-title">${displayName}</div><div class="diagram-placeholder">[Diagram: ${displayName} - Run 'npm run whitepaper:diagrams' to generate]</div></div>`;

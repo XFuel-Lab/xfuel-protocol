@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>XFUEL: The Perpetual Yield Pumping Station - Whitepaper v1.0</title>
+  <style>/* XFUEL Whitepaper - Cyberpunk Neon Design System */
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Share+Tech+Mono&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+:root {
+  --neon-pink: #ff00ff;
+  --neon-cyan: #00ffff;
+  --neon-green: #00ff41;
+  --neon-purple: #b026ff;
+  --dark-bg: #0a0a0a;
+  --darker-bg: #050505;
+  --glass-bg: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --grid-color: rgba(0, 255, 255, 0.1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Rajdhani', 'Share Tech Mono', sans-serif;
+  background: var(--dark-bg);
+  color: var(--text-primary);
+  line-height: 1.8;
+  font-size: 11pt;
+  overflow-x: hidden;
+}
+
+/* Grid/Hologram Background Effect */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: 
+    linear-gradient(var(--grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+  background-size: 50px 50px;
+  opacity: 0.3;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Cover Page */
+.cover-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 4rem 2rem;
+  position: relative;
+  background: linear-gradient(135deg, var(--darker-bg) 0%, var(--dark-bg) 100%);
+}
+
+.cover-page::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: radial-gradient(circle at 50% 50%, rgba(255, 0, 255, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.logo-placeholder {
+  width: 200px;
+  height: 200px;
+  margin: 2rem auto;
+  border: 3px solid var(--neon-pink);
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  box-shadow: 
+    0 0 30px rgba(255, 0, 255, 0.5),
+    inset 0 0 30px rgba(255, 0, 255, 0.1);
+  font-family: 'Orbitron', sans-serif;
+  font-size: 2rem;
+  color: var(--neon-pink);
+  text-shadow: 0 0 20px var(--neon-pink);
+}
+
+h1 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 3.5rem;
+  font-weight: 900;
+  margin: 2rem 0 1rem;
+  background: linear-gradient(135deg, var(--neon-pink), var(--neon-cyan), var(--neon-green));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-shadow: 0 0 40px rgba(255, 0, 255, 0.8);
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+
+.cover-subtitle {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 1.2rem;
+  color: var(--neon-cyan);
+  text-shadow: 0 0 15px var(--neon-cyan);
+  margin-top: 1rem;
+  letter-spacing: 0.2em;
+}
+
+.cover-date {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-top: 3rem;
+  letter-spacing: 0.15em;
+}
+
+/* Typography */
+h2 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--neon-cyan);
+  margin: 3rem 0 1.5rem;
+  text-shadow: 0 0 20px rgba(0, 255, 255, 0.6);
+  border-bottom: 2px solid var(--neon-cyan);
+  padding-bottom: 0.5rem;
+  display: inline-block;
+}
+
+h3 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--neon-green);
+  margin: 2rem 0 1rem;
+  text-shadow: 0 0 15px rgba(0, 255, 65, 0.5);
+}
+
+h4 {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--neon-purple);
+  margin: 1.5rem 0 0.8rem;
+}
+
+p {
+  margin: 1rem 0;
+  color: var(--text-primary);
+  text-align: justify;
+}
+
+/* Glassmorphism Panels */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  padding: 2rem;
+  margin: 2rem 0;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    inset 0 0 20px rgba(255, 255, 255, 0.05);
+}
+
+.glass-panel h3 {
+  margin-top: 0;
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 2rem 0;
+  background: var(--glass-bg);
+  backdrop-filter: blur(10px);
+  border: 2px solid var(--neon-cyan);
+  box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+}
+
+th {
+  font-family: 'Orbitron', sans-serif;
+  background: rgba(0, 255, 255, 0.1);
+  color: var(--neon-cyan);
+  padding: 1rem;
+  text-align: left;
+  border-bottom: 2px solid var(--neon-cyan);
+  text-shadow: 0 0 10px var(--neon-cyan);
+  font-weight: 600;
+}
+
+td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+tr:hover {
+  background: rgba(0, 255, 255, 0.05);
+}
+
+/* Diagrams */
+.diagram-container {
+  margin: 3rem 0;
+  padding: 2rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 2px solid var(--neon-pink);
+  border-radius: 12px;
+  box-shadow: 
+    0 0 30px rgba(255, 0, 255, 0.4),
+    inset 0 0 30px rgba(255, 0, 255, 0.1);
+}
+
+.diagram-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.5rem;
+  color: var(--neon-pink);
+  text-align: center;
+  margin-bottom: 2rem;
+  text-shadow: 0 0 20px var(--neon-pink);
+}
+
+.diagram-placeholder {
+  min-height: 400px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--darker-bg);
+  border: 2px dashed var(--neon-cyan);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* Screenshot Placeholders */
+.screenshot-placeholder {
+  width: 100%;
+  margin: 2rem 0;
+  padding: 2rem;
+  background: var(--glass-bg);
+  border: 2px solid var(--neon-green);
+  border-radius: 12px;
+  text-align: center;
+  box-shadow: 0 0 25px rgba(0, 255, 65, 0.3);
+}
+
+.screenshot-placeholder::before {
+  content: '📱';
+  font-size: 4rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.screenshot-label {
+  font-family: 'Orbitron', sans-serif;
+  color: var(--neon-green);
+  font-size: 1rem;
+  text-shadow: 0 0 10px var(--neon-green);
+}
+
+/* Lists */
+ul, ol {
+  margin: 1rem 0 1rem 2rem;
+  color: var(--text-primary);
+}
+
+li {
+  margin: 0.5rem 0;
+}
+
+li::marker {
+  color: var(--neon-cyan);
+}
+
+/* Code Blocks */
+code {
+  font-family: 'Share Tech Mono', monospace;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  color: var(--neon-green);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+}
+
+pre {
+  background: rgba(0, 0, 0, 0.7);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid var(--neon-green);
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  box-shadow: 0 0 20px rgba(0, 255, 65, 0.2);
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* Page Breaks */
+.page-break {
+  page-break-after: always;
+  break-after: page;
+}
+
+/* Footer */
+.footer {
+  margin-top: 4rem;
+  padding: 2rem;
+  text-align: center;
+  border-top: 2px solid var(--neon-cyan);
+  color: var(--text-secondary);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.9rem;
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background: var(--dark-bg);
+  }
+  
+  .page-break {
+    page-break-after: always;
+  }
+  
+  @page {
+    size: A4;
+    margin: 2cm;
+  }
+}
+
+/* Neon Glow Animations */
+@keyframes neon-pulse {
+  0%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 20px currentColor;
+  }
+  50% {
+    opacity: 0.8;
+    text-shadow: 0 0 30px currentColor, 0 0 40px currentColor;
+  }
+}
+
+.neon-glow {
+  animation: neon-pulse 2s ease-in-out infinite;
+}
+
+/* Utility Classes */
+.text-neon-pink { color: var(--neon-pink); text-shadow: 0 0 15px var(--neon-pink); }
+.text-neon-cyan { color: var(--neon-cyan); text-shadow: 0 0 15px var(--neon-cyan); }
+.text-neon-green { color: var(--neon-green); text-shadow: 0 0 15px var(--neon-green); }
+.text-neon-purple { color: var(--neon-purple); text-shadow: 0 0 15px var(--neon-purple); }
+
+.highlight-box {
+  border-left: 4px solid var(--neon-cyan);
+  padding-left: 1.5rem;
+  margin: 1.5rem 0;
+  background: rgba(0, 255, 255, 0.05);
+  padding: 1rem 1.5rem;
+  border-radius: 4px;
+}
+
+</style>
+</head>
+<body>
+  <div class="cover-page">
+    <div class="logo-placeholder">XFUEL</div>
+    <h1>XFUEL: The Perpetual Yield Pumping Station</h1>
+    <div class="cover-subtitle">Whitepaper v1.0</div>
+    <div class="cover-date">December 18, 2025</div>
+  </div>
+  <div class="page-break"></div>
+  <div class="content">
+    <h1>XFUEL: The Perpetual Yield Pumping Station  </h1>
+<p><strong>Whitepaper v1.0 — December 18, 2025</strong></p>
+
+<h2>Abstract  </h2>
+<p>XFUEL is a decentralized yield rail that routes Theta EdgeCloud revenue—amplified by the TDROP 2.0 AI agent economy—into auto-compounding Cosmos liquid staked tokens (LSTs). Launched with a live product (v1.0.0), XFUEL delivers sub-4s swaps, institutional-grade tools, and a cyberpunk interface for Edge Node operators, creators, and yield seekers.</p>
+
+<p>This whitepaper outlines XFUEL's architecture, groundbreaking tokenomics, and vision for a self-evolving ecosystem where protocol revenue drives perpetual innovation, deflation, and holder equity in spin-out projects.</p>
+
+<h2>1. Introduction & Vision  </h2>
+<p>Theta Network's EdgeCloud, powered by thousands of decentralized nodes, now accelerates with TDROP 2.0 incentives for AI inference, rendering, and compute tasks. Node operators earn TFUEL pulses from real-world workloads, yet lack efficient, auto-compounding yield channels.</p>
+
+<p>Cosmos LST providers (e.g., Stride, Quicksilver, MilkyWay) offer 30-38%+ APYs on stkTIA, stkATOM, and others, but remain isolated from Theta earners.</p>
+
+<p>XFUEL bridges this gap: a one-tap rail converting Theta revenue into Cosmos yields, with creator tools, Tip Pools lottery, and institutional portals. Beyond a simple swap protocol, XFUEL evolves into a <strong>perpetual yield pumping station</strong>—a living economy where revenue funds innovation, governance rewards long-term alignment, and successful experiments spawn new tokens airdropped to holders.</p>
+
+<h2>2. The Opportunity: Theta's AI Agent Economy  </h2>
+<p>TDROP 2.0 (released December 17, 2025) reorients incentives toward decentralized AI compute and agent payments. Edge Nodes running AI jobs generate increased TFUEL earnings, creating a growing revenue stream for operators.</p>
+
+<p>XFUEL captures this flow:</p>
+<ul><li>Direct integration with Theta Wallet and TPulse messages.</li></ul>
+<ul><li>Proof-of-earnings staking for governance boosts.</li></ul>
+<ul><li>Positioning as the default yield layer for Theta's expanding AI ecosystem.</li></ul>
+
+<h2>3. Product & Architecture (Live v1.0.0)  </h2>
+<h3>Core Features  </h3>
+<ul><li>**Swap Rail** — Theta Wallet connect → swap TFUEL → top Cosmos LSTs (current leader: stkTIA at 38.2% APY). Simulation mode live; real execution pending testnet TFUEL unlock.  </li></ul>
+<ul><li>**Farming Dashboard** — Track yields, auto-compounding positions.  </li></ul>
+<ul><li>**Tip Pools Lottery** — Revenue-share lottery with creator entries.  </li></ul>
+<ul><li>**Creator Tools** — Dashboard for content monetization and tips.  </li></ul>
+<ul><li>**Institutional Portal** — Bulk operations, custom yields.</li></ul>
+
+<h3>Tech Stack  </h3>
+<ul><li>Frontend: Next.js web + Expo React Native mobile (glassmorphism cyberpunk UI).  </li></ul>
+<ul><li>Backend: Hardhat contracts, Theta EVM-compatible.  </li></ul>
+<ul><li>Repo: https://github.com/XFuel-Lab/xfuel-protocol  </li></ul>
+<ul><li>Live: https://xfuel.app</li></ul>
+
+<h3>Phase 2 Roadmap  </h3>
+<ul><li>ZK-intents routing.  </li></ul>
+<ul><li>AI-optimized yield prediction.  </li></ul>
+<ul><li>Deeper Theta Pulse listeners.</li></ul>
+
+<h2>4. Tokenomics 3.1 — The Perpetual Innovation Engine  </h2>
+<p><strong>Total Supply</strong>: 100,000,000 XF (fixed, no inflation).</p>
+
+<p>| Allocation                | Percentage | XF (Millions) | Vesting/Mechanics |</p>
+<p>|---------------------------|------------|---------------|-------------------|</p>
+<p>| Liquidity + Deflation Engine | 45%       | 45           | 20% initial LP; 75% revenue → buy & burn |</p>
+<p>| Community Flywheel & Real-Yield | 30%       | 30           | TVL-gated emissions + rXF mints |</p>
+<p>| Perpetual Innovation Treasury | 10%       | 10           | Starting bag + 10% revenue accrual |</p>
+<p>| Founder & Core Contributors | 10%       | 10           | 4-year linear + TVL/revenue cliffs ($100M, $500M, $1B TVL; $20M+ annual revenue) |</p>
+<p>| Early Strategic Believers | 5%        | 5            | 24-month linear vest (OTC raise ~$600-750k at $15-18M FDV) |</p>
+
+<h3>Revenue Flow  </h3>
+<p>All protocol revenue (swaps, yield cuts, lottery rake):  </p>
+<ul><li>**90%** → veXF holders:  </li></ul>
+<p>  - 50% direct stablecoin yield.  </p>
+<p>  - 25% buy & burn XF.  </p>
+<p>  - 15% mint rXF (revenue-backed receipts).  </p>
+<ul><li>**10%** → Perpetual Innovation Treasury (self-funding growth).</li></ul>
+
+<h3>Groundbreaking Innovations  </h3>
+<ul><li>**rXF Revenue-Backed Receipts** — Soulbound tokens minted from revenue; lock 365 days for 4× veXF voting power + priority spin-out airdrops.  </li></ul>
+<ul><li>**Theta Pulse Proof Staking** — Submit cryptographic proof of Edge Node earnings → permanent veXF multiplier (up to 3×) for real compute contributors.  </li></ul>
+<ul><li>**Innovation Treasury Vaults** (veXF-governed):  </li></ul>
+<p>   - <strong>Builder Vault</strong> → Micro-grants for open-source XFUEL tools.  </p>
+<p>   - <strong>Acquisition Vault</strong> → Purchase revenue-generating mini-protocols.  </p>
+<p>   - <strong>Moonshot Vault</strong> → Fund experiments (ZK/AI); successes spin out tokens (50% airdropped to veXF/rXF holders).  </p>
+<ul><li>**Cybernetic Fee Switch** → Governance toggles fees for growth vs. extraction modes.</li></ul>
+
+<p><div class="diagram-container"><div class="diagram-title">Revenue & Token Flow</div><div class="diagram-placeholder">[Diagram: Revenue & Token Flow - Run 'npm run whitepaper:diagrams' to generate]</div></div></p>
+
+<p><div class="diagram-container"><div class="diagram-title">Innovation Flywheel</div><div class="diagram-placeholder">[Diagram: Innovation Flywheel - Run 'npm run whitepaper:diagrams' to generate]</div></div></p>
+
+<h2>5. Governance & Sustainability  </h2>
+<p>veXF holders control:  </p>
+<ul><li>Fee Switch.  </li></ul>
+<ul><li>Treasury allocations.  </li></ul>
+<ul><li>Emissions schedule.</li></ul>
+
+<p>Dynamic triggers maintain balance: TVL surges pause emissions and bonus rXF; dips temporarily boost from treasury.</p>
+
+<h2>6. Risks & Disclaimer  </h2>
+<p>Market volatility, smart contract risks, regulatory changes. XFUEL is experimental software; use at own risk. No guarantees of value or returns.</p>
+
+<h2>7. Conclusion  </h2>
+<p>XFUEL is more than a yield protocol—it's the perpetual yield pumping station powering Theta's AI future. Holders earn real yield today and equity in tomorrow's expansions.</p>
+
+<p>Live now. The pumps are primed.</p>
+
+<p><strong>Links</strong>  </p>
+<ul><li>Web: https://xfuel.app  </li></ul>
+<ul><li>Repo/Release: https://github.com/XFuel-Lab/xfuel-protocol/releases/tag/v1.0.0  </li></ul>
+<ul><li>Community: X @XFUEL, Theta Discord channels</li></ul>
+
+<p><strong>Prepared by the XFUEL Core — December 18, 2025</strong></p>
+
+  </div>
+  <div class="footer">
+    <p>XFUEL Protocol - The Perpetual Yield Pumping Station</p>
+    <p>Whitepaper v1.0 | December 18, 2025</p>
+  </div>
+</body>
+</html>

@@ -18,6 +18,7 @@ function generateMediumMarkdown() {
   // Convert diagram placeholders to Medium-friendly format
   const diagramMap = {
     'Revenue & Token Flow': 'revenue-flow',
+    'Perpetual Pumping Flywheel': 'innovation-flywheel',
     'Innovation Flywheel': 'innovation-flywheel'
   };
   

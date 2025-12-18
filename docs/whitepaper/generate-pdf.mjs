@@ -130,6 +130,7 @@ function convertMarkdownToHTML(markdown, styles) {
   // Map display names to file names
   const diagramMap = {
     'Revenue & Token Flow': 'revenue-flow',
+    'Perpetual Pumping Flywheel': 'innovation-flywheel',
     'Innovation Flywheel': 'innovation-flywheel'
   };
   
@@ -175,9 +176,9 @@ function convertMarkdownToHTML(markdown, styles) {
 <body>
   <div class="cover-page">
     <div class="logo-placeholder">XFUEL</div>
-    <h1>XFUEL: The Perpetual Yield Pumping Station</h1>
-    <div class="cover-subtitle">Whitepaper v1.0</div>
-    <div class="cover-date">December 18, 2025</div>
+    <h1>XFUEL</h1>
+    <div class="cover-subtitle">The Perpetual Yield Pumping Station</div>
+    <div class="cover-date">Whitepaper v1.0 — December 18, 2025</div>
   </div>
   <div class="page-break"></div>
   <div class="content">

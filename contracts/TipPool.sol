@@ -154,14 +154,8 @@ contract TipPool is ReentrancyGuard, Ownable {
         
         pool.ended = true;
         
-        // Use block.prevrandao if available (Solidity 0.8.18+), otherwise fallback
-        uint256 randomSeed;
-        if (block.prevrandao != 0) {
-            randomSeed = uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, poolId)));
-        } else {
-            // Fallback for older chains
-            randomSeed = uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty, block.number, poolId)));
-        }
+        // Use block.prevrandao for randomness (Paris VM version)
+        uint256 randomSeed = uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, poolId)));
         pool.randomSeed = randomSeed;
         
         // Draw winner
@@ -208,13 +202,8 @@ contract TipPool is ReentrancyGuard, Ownable {
             // Use stored random seed from endPool
             random = pool.randomSeed;
         } else {
-            // Fallback: use block.prevrandao if available
-            if (block.prevrandao != 0) {
-                random = uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, poolId)));
-            } else {
-                // Last resort fallback (less secure)
-                random = uint256(keccak256(abi.encodePacked(block.timestamp, block.difficulty, block.number, poolId)));
-            }
+            // Use block.prevrandao for randomness (Paris VM version)
+            random = uint256(keccak256(abi.encodePacked(block.prevrandao, block.timestamp, poolId)));
         }
         
         uint256 totalWeight = pool.totalTips;

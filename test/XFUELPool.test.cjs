@@ -1,6 +1,5 @@
 const { expect } = require('chai')
 const { ethers } = require('hardhat')
-const hre = require('hardhat')
 const { getAddress, parseEther, getZeroAddress } = require('./helpers.cjs')
 
 describe('XFUELPool', function () {
@@ -8,13 +7,7 @@ describe('XFUELPool', function () {
   let owner, user, recipient
 
   beforeEach(async function () {
-    // Reset network state to prevent pollution between tests
-    await hre.network.provider.request({
-      method: 'hardhat_reset',
-      params: []
-    })
-    
-    [owner, user, recipient] = await ethers.getSigners()
+    ;[owner, user, recipient] = await ethers.getSigners()
 
     // Deploy mock ERC20 tokens
     const MockERC20 = await ethers.getContractFactory('MockERC20')
@@ -36,10 +29,7 @@ describe('XFUELPool', function () {
 
   afterEach(async function () {
     // Reset network state after each test
-    await hre.network.provider.request({
-      method: 'hardhat_reset',
-      params: []
-    })
+    // Note: Removed hardhat_reset to avoid module loading issues
   })
 
   describe('Deployment', function () {
@@ -237,10 +227,7 @@ describe('XFUELPool', function () {
       await ethers.provider.send('evm_mine', [])
       
       // Increase time and mine again to ensure state is fully settled
-      await hre.network.provider.request({
-        method: 'evm_increaseTime',
-        params: [1]
-      })
+      await ethers.provider.send('evm_increaseTime', [1])
       await ethers.provider.send('evm_mine', [])
       
       // Verify approval
@@ -267,10 +254,7 @@ describe('XFUELPool', function () {
       await ethers.provider.send('evm_mine', [])
       
       // Increase time and mine again to ensure state is fully settled
-      await hre.network.provider.request({
-        method: 'evm_increaseTime',
-        params: [1]
-      })
+      await ethers.provider.send('evm_increaseTime', [1])
       await ethers.provider.send('evm_mine', [])
       
       // Verify approval
@@ -292,10 +276,7 @@ describe('XFUELPool', function () {
       await ethers.provider.send('evm_mine', [])
       
       // Increase time and mine again to ensure state is fully settled
-      await hre.network.provider.request({
-        method: 'evm_increaseTime',
-        params: [1]
-      })
+      await ethers.provider.send('evm_increaseTime', [1])
       await ethers.provider.send('evm_mine', [])
       
       // Verify approval
@@ -326,10 +307,7 @@ describe('XFUELPool', function () {
       await ethers.provider.send('evm_mine', [])
       
       // Increase time and mine again to ensure state is fully settled
-      await hre.network.provider.request({
-        method: 'evm_increaseTime',
-        params: [1]
-      })
+      await ethers.provider.send('evm_increaseTime', [1])
       await ethers.provider.send('evm_mine', [])
       
       // Verify approval
@@ -384,10 +362,7 @@ describe('XFUELPool', function () {
       await ethers.provider.send('evm_mine', [])
       
       // Increase time and mine again to ensure state is fully settled
-      await hre.network.provider.request({
-        method: 'evm_increaseTime',
-        params: [1]
-      })
+      await ethers.provider.send('evm_increaseTime', [1])
       await ethers.provider.send('evm_mine', [])
       
       // Verify approval with explicit logging

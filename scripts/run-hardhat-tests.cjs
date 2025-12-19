@@ -17,7 +17,17 @@ if (packageJson.type === 'module') {
 
 let exitCode = 0
 try {
-  // Compile contracts first to ensure artifacts are generated
+  // Clean and compile contracts first to ensure artifacts are generated
+  console.log('Cleaning artifacts...')
+  try {
+    execSync('npx hardhat clean', {
+      stdio: 'pipe',
+      cwd: path.join(__dirname, '..'),
+    })
+  } catch (e) {
+    // Ignore clean errors
+  }
+  
   console.log('Compiling contracts...')
   execSync('npx hardhat compile', {
     stdio: 'inherit',
@@ -27,6 +37,14 @@ try {
       NODE_OPTIONS: '--no-warnings',
     },
   })
+  
+  // Verify artifacts exist
+  const artifactsPath = path.join(__dirname, '..', 'artifacts', 'contracts', 'veXF.sol', 'veXF.json')
+  if (!fs.existsSync(artifactsPath)) {
+    console.error('ERROR: veXF artifact not found after compilation!')
+    console.error('Expected path:', artifactsPath)
+    process.exit(1)
+  }
   
   // Run hardhat test using npx (synchronously to ensure package.json change is applied)
   console.log('Running tests...')

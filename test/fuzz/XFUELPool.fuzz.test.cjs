@@ -230,8 +230,12 @@ describe('XFUELPool Fuzz Tests', function () {
       const userAddr = await getAddress(user)
       const reasonableMinOut = parseEther('0.0001') // Very low but not zero
 
+      // Mint tokens to user
       await token0.mint(userAddr, swapAmount.mul(2))
-      const approveTx = await token0.connect(user).approve(poolAddr, swapAmount.mul(2))
+      
+      // Approve pool to spend tokens - use a large approval to avoid issues
+      const maxApproval = ethers.BigNumber.from('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
+      const approveTx = await token0.connect(user).approve(poolAddr, maxApproval)
       await approveTx.wait()
       
       // Mine block to ensure approval is processed

@@ -38,11 +38,49 @@ try {
     },
   })
   
-  // Verify artifacts exist
-  const artifactsPath = path.join(__dirname, '..', 'artifacts', 'contracts', 'veXF.sol', 'veXF.json')
-  if (!fs.existsSync(artifactsPath)) {
+  // Verify artifacts exist - check multiple possible paths due to case sensitivity
+  const artifactsDir = path.join(__dirname, '..', 'artifacts', 'contracts')
+  const possiblePaths = [
+    path.join(artifactsDir, 'veXF.sol', 'veXF.json'),
+    path.join(artifactsDir, 'VeXF.sol', 'VeXF.json'),
+    path.join(artifactsDir, 'VeXF.sol', 'veXF.json'),
+    path.join(artifactsDir, 'veXF.sol', 'VeXF.json'),
+  ]
+  
+  let artifactFound = false
+  let foundPath = null
+  for (const artifactPath of possiblePaths) {
+    if (fs.existsSync(artifactPath)) {
+      artifactFound = true
+      foundPath = artifactPath
+      console.log('✓ Found veXF artifact at:', artifactPath)
+      break
+    }
+  }
+  
+  if (!artifactFound) {
     console.error('ERROR: veXF artifact not found after compilation!')
-    console.error('Expected path:', artifactsPath)
+    console.error('Checked paths:')
+    possiblePaths.forEach(p => console.error('  -', p))
+    
+    // List what artifacts actually exist
+    console.error('\nAvailable artifacts:')
+    try {
+      const contractsDir = fs.readdirSync(artifactsDir)
+      contractsDir.forEach(dir => {
+        const dirPath = path.join(artifactsDir, dir)
+        if (fs.statSync(dirPath).isDirectory()) {
+          const files = fs.readdirSync(dirPath)
+          files.forEach(file => {
+            if (file.endsWith('.json') && !file.endsWith('.dbg.json')) {
+              console.error(`  - ${dir}/${file}`)
+            }
+          })
+        }
+      })
+    } catch (e) {
+      console.error('  Could not list artifacts:', e.message)
+    }
     process.exit(1)
   }
   

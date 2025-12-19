@@ -45,7 +45,7 @@ contract MockXFUELRouter {
      */
     function swapAndStakeFail(
         uint256 tfuelAmount,
-        string memory stakeTarget
+        string memory /* stakeTarget */
     ) external {
         emit SwapFailed(msg.sender, tfuelAmount, "Mock failure for testing");
         revert("Swap failed");

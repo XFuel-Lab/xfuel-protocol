@@ -100,7 +100,7 @@ contract XFUELPool is ReentrancyGuard {
         address recipient,
         bool zeroForOne,
         int256 amountSpecified,
-        uint160 sqrtPriceLimitX96,
+        uint160 /* sqrtPriceLimitX96 */,
         uint256 minAmountOut
     ) external nonReentrant returns (int256 amount0, int256 amount1) {
         require(amountSpecified != 0, "XFUELPool: INVALID_AMOUNT");

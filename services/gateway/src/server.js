@@ -3114,13 +3114,15 @@ export function createApp() {
       const aiListener = getAIListener();
       const task = _findTask(aiListener, taskId);
       if (!task) return null;
-      return buildReceipt(task, {
+      const receipt = buildReceipt(task, {
         baseUrl: config.service.publicBaseUrl || '',
         signingSecret: config.receipts?.signingSecret,
         coSignerSecret: config.receipts?.coSignerSecret,
         viPolicy: config.verifiedInference,
         persistSignature: true,
       });
+      // Slim envelope stores payment in issuer_signature.jws; register/dispute need hydrated payment.
+      return mergeReceiptView(receipt);
     } catch {
       return null;
     }

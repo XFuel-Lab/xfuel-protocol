@@ -28,7 +28,7 @@ import {
   applyPaymentToOwedTask,
   configureRollingLedger,
 } from './rolling-settlement.js';
-import { buildReceipt, buildAuditorExport, renderReceiptHtml, renderAuditorHtml, renderReceiptNotFound, buildVerifyUrl, baseUrlFromReq, normalizeTaskIdForLookup, proofOutcomeOf, verifyReceiptHmac, verifyOriginHandoff, verifyDestAck, issueSessionHandoffReceipt, mergeReceiptView, decodeReceiptClaims } from './receipt.js';
+import { buildReceipt, buildAuditorExport, renderReceiptHtml, renderAuditorHtml, renderReceiptNotFound, buildVerifyUrl, baseUrlFromReq, normalizeTaskIdForLookup, proofOutcomeOf, verifyReceiptMultiKey, verifyOriginHandoff, verifyDestAck, issueSessionHandoffReceipt, mergeReceiptView, decodeReceiptClaims } from './receipt.js';
 import {
   getSessionStore,
   bindSessionFromRequest,
@@ -982,6 +982,8 @@ export function createApp() {
 
   const aawp = aawpReaders(config.erc8004?.rpcUrl || config.settlement?.rpcUrl);
   const verifyBook = bindBookVerifier(agentRegistry);
+  const verifyStoredReceipt = (receipt) =>
+    verifyReceiptMultiKey(receipt, [config.receipts?.signingSecret, config.receipts?.coSignerSecret].filter(Boolean));
 
   // AkashML publishes no capacity signal and serves all live inference, so
   // without this an outage there is discovered by failing a customer's call.
@@ -3132,7 +3134,7 @@ export function createApp() {
         registry: agentRegistry,
         ledger: usageSettled,
         loadReceipt: loadReceiptJson,
-        verify: (receipt) => verifyReceiptHmac(receipt, config.receipts?.signingSecret),
+        verify: verifyStoredReceipt,
         apiKey: req.headers['x-api-key'] || null,
         walletOpts: { provider: aawp.provider, identity: aawp.identity },
         postA2A: (fields) => recordA2AMessage(fields),
@@ -3455,7 +3457,7 @@ export function createApp() {
         disputes: bookDisputes,
         ledger: usageSettled,
         loadReceipt: loadReceiptJson,
-        verifyReceipt: (r) => verifyReceiptHmac(r, config.receipts?.signingSecret),
+        verifyReceipt: verifyStoredReceipt,
       });
 
       if (!result.ok) {

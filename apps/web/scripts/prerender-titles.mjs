@@ -37,6 +37,11 @@ const ROUTE_CONTENT = {
     h1: 'This agent spent Y on this job.',
     lede: 'Possession-gated spend dashboard for the principal who funds agents. Budget cap, burn rate, model mix, and last-N collected rows from GET|POST /v1/agents/:agent_id/book. Not a public index.',
   },
+  '/register': {
+    title: 'Register agent — hold the book | Chit402',
+    h1: 'Hold the book after a paid call',
+    lede: 'Bind an agent wallet to a collected receipt via POST /v1/agents/register. Receive agent_id and possession session for GET|POST /v1/agents/:agent_id/book. Demo receipts do not qualify.',
+  },
   '/book-bot': {
     title: 'Paste this. The shop gets a till | Chit',
     h1: 'Paste this. The shop gets a till.',

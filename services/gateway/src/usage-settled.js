@@ -293,6 +293,65 @@ export class UsageSettledLedger {
     }
     return sum;
   }
+
+  /**
+   * Sum of collected amounts for one agent_id in the current clock hour (UTC).
+   * For hourly cap enforcement.
+   * @param {number|string} agentId
+   * @returns {bigint}
+   */
+  sumCollectedByAgentThisHour(agentId) {
+    const id = Number(agentId);
+    let sum = 0n;
+    if (!Number.isInteger(id) || id < 1) return sum;
+
+    const now = new Date();
+    const hourStart = new Date(Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate(),
+      now.getUTCHours(),
+      0, 0, 0,
+    ));
+
+    for (const e of this.entries) {
+      if (Number(e.agent_id) !== id) continue;
+      if (e.collected !== true) continue;
+      const rail = String(e.rail || '').toLowerCase();
+      if (UNMETERED_RAILS.has(rail)) continue;
+
+      const collectedAt = new Date(e.collected_at || e.recorded_at);
+      if (collectedAt < hourStart) continue;
+
+      try {
+        sum += BigInt(String(e.amount ?? '0').trim() || '0');
+      } catch {
+        /* skip malformed */
+      }
+    }
+    return sum;
+  }
+
+  /**
+   * True when any collected row for agent_id lacks payment_ref (audit integrity gap).
+   * @param {number|string} agentId
+   * @returns {{ has_gap: boolean, task_id?: string }}
+   */
+  hasIntegrityGapForAgent(agentId) {
+    const id = Number(agentId);
+    if (!Number.isInteger(id) || id < 1) return { has_gap: false };
+
+    for (const e of this.entries) {
+      if (Number(e.agent_id) !== id) continue;
+      if (e.collected !== true) continue;
+      const rail = String(e.rail || '').toLowerCase();
+      if (UNMETERED_RAILS.has(rail)) continue;
+      if (!e.payment_ref) {
+        return { has_gap: true, task_id: e.task_id || null };
+      }
+    }
+    return { has_gap: false };
+  }
 }
 
 /**

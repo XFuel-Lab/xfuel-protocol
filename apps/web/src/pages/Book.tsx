@@ -5,15 +5,20 @@ import { getHostConfig } from '../hostConfig';
 import {
   type AgentBookResponse,
   type BookFetchError,
+  type BookPolicy,
   computeBurnRate,
   computeModelMix,
   fetchAgentBook,
+  fetchBookExport,
+  fetchBookPolicy,
   formatCollectedAt,
   formatUsdc,
   parseUsdcInput,
+  setBookPolicy,
   summarizePaymentRef,
   verifyUrlFor,
   type ModelMixItem,
+  type PolicyType,
 } from '../lib/agentBook';
 import {
   clearBookCredentials,
@@ -77,10 +82,33 @@ export default function Book() {
   const [budgetDraft, setBudgetDraft] = useState('');
   const [budgetSaving, setBudgetSaving] = useState(false);
   const [budgetMessage, setBudgetMessage] = useState<string | null>(null);
+  const [policy, setPolicy] = useState<BookPolicy | null>(null);
+  const [policyMessage, setPolicyMessage] = useState<string | null>(null);
+  const [policySaving, setPolicySaving] = useState(false);
+  const [killSwitch, setKillSwitch] = useState(false);
+  const [dailyCapDraft, setDailyCapDraft] = useState('');
+  const [hourlyCapDraft, setHourlyCapDraft] = useState('');
+  const [modelAllowlistDraft, setModelAllowlistDraft] = useState('');
+  const [tier2AboveDraft, setTier2AboveDraft] = useState('');
+  const [requirePaymentRef, setRequirePaymentRef] = useState(false);
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
 
   useEffect(() => {
     document.title = `Principal book — spend dashboard | ${productName}`;
   }, [productName]);
+
+  const loadPolicy = useCallback(async (agentId: number, session: string) => {
+    const result = await fetchBookPolicy(apiV1, { agentId, session });
+    if (!result.ok) return;
+    const p = result.data.policy;
+    setPolicy(p);
+    setKillSwitch(!!p?.kill_switch);
+    setDailyCapDraft(p?.daily_cap?.limit ? formatUsdc(p.daily_cap.limit) : '');
+    setHourlyCapDraft(p?.hourly_cap?.limit ? formatUsdc(p.hourly_cap.limit) : '');
+    setModelAllowlistDraft(p?.model_allowlist?.join(', ') || '');
+    setTier2AboveDraft(p?.tier2_above?.threshold ? formatUsdc(p.tier2_above.threshold) : '');
+    setRequirePaymentRef(!!p?.require_payment_ref);
+  }, [apiV1]);
 
   useEffect(() => {
     const saved = loadBookCredentials();
@@ -123,9 +151,10 @@ export default function Book() {
         if (result.data.cap != null) {
           setBudgetDraft(formatUsdc(result.data.cap));
         }
+        void loadPolicy(id, session);
       })();
     }
-  }, [apiV1, searchParams, setSearchParams]);
+  }, [apiV1, loadPolicy, searchParams, setSearchParams]);
 
   const loadBook = useCallback(async (opts?: { budget?: string | null }) => {
     const agentId = Number(agentIdInput.trim());
@@ -171,7 +200,8 @@ export default function Book() {
     } else {
       setBudgetDraft('');
     }
-  }, [agentIdInput, apiV1, sessionInput]);
+    void loadPolicy(agentId, session);
+  }, [agentIdInput, apiV1, loadPolicy, sessionInput]);
 
   const burnRate = useMemo(
     () => (book ? computeBurnRate(book.entries, 24) : null),
@@ -221,6 +251,94 @@ export default function Book() {
     } else {
       setBudgetDraft('');
     }
+  };
+
+  const handleSavePolicy = async () => {
+    const agentId = Number(agentIdInput.trim());
+    const session = sessionInput.trim();
+    if (!Number.isInteger(agentId) || agentId < 1 || !session) return;
+
+    setPolicySaving(true);
+    setPolicyMessage(null);
+
+    const updates: Array<{ type: PolicyType; value: unknown }> = [
+      { type: 'kill_switch', value: killSwitch },
+      { type: 'require_payment_ref', value: requirePaymentRef },
+    ];
+
+    const dailyParsed = dailyCapDraft.trim() ? parseUsdcInput(dailyCapDraft) : null;
+    if (dailyCapDraft.trim() && dailyParsed == null) {
+      setPolicySaving(false);
+      setPolicyMessage('Daily cap: enter a valid USDC amount or leave empty to clear.');
+      return;
+    }
+    updates.push({ type: 'daily_cap', value: dailyParsed });
+
+    const hourlyParsed = hourlyCapDraft.trim() ? parseUsdcInput(hourlyCapDraft) : null;
+    if (hourlyCapDraft.trim() && hourlyParsed == null) {
+      setPolicySaving(false);
+      setPolicyMessage('Hourly cap: enter a valid USDC amount or leave empty to clear.');
+      return;
+    }
+    updates.push({ type: 'hourly_cap', value: hourlyParsed });
+
+    const allowlist = modelAllowlistDraft.trim()
+      ? modelAllowlistDraft.split(/[,\n]+/).map((s) => s.trim()).filter(Boolean)
+      : null;
+    updates.push({ type: 'model_allowlist', value: allowlist });
+
+    const tier2Parsed = tier2AboveDraft.trim() ? parseUsdcInput(tier2AboveDraft) : null;
+    if (tier2AboveDraft.trim() && tier2Parsed == null) {
+      setPolicySaving(false);
+      setPolicyMessage('Tier-2 threshold: enter a valid USDC amount or leave empty to clear.');
+      return;
+    }
+    updates.push({ type: 'tier2_above', value: tier2Parsed });
+
+    for (const u of updates) {
+      const result = await setBookPolicy(apiV1, { agentId, session, policyType: u.type, value: u.value });
+      if (!result.ok) {
+        setPolicySaving(false);
+        setPolicyMessage(result.message || errorCopy(result.error).body);
+        return;
+      }
+      setPolicy(result.data.policy);
+    }
+
+    setPolicySaving(false);
+    setPolicyMessage('Policy saved.');
+  };
+
+  const handleExport = async (format: 'csv' | 'json' | 'html') => {
+    const agentId = Number(agentIdInput.trim());
+    const session = sessionInput.trim();
+    if (!Number.isInteger(agentId) || agentId < 1 || !session) return;
+
+    setExportMessage(null);
+    const result = await fetchBookExport(apiV1, { agentId, session, format, limit: 200 });
+    if (!result.ok) {
+      setExportMessage(errorCopy(result.error).body);
+      return;
+    }
+
+    if (format === 'html') {
+      const text = await result.blob.text();
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(text);
+        w.document.close();
+      }
+      setExportMessage('Audit pack opened — use Print to PDF in your browser.');
+      return;
+    }
+
+    const url = URL.createObjectURL(result.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = result.filename || `chit402-book-${agentId}.${format}`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportMessage(format === 'csv' ? 'CSV downloaded.' : 'JSON audit pack downloaded.');
   };
 
   const hasCredentials = agentIdInput.trim() && sessionInput.trim();
@@ -412,6 +530,116 @@ export default function Book() {
               )}
             </section>
 
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.75rem' }}>Book policy</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
+                Caps sit on the book you hold — not inside the router. Possession-gated via{' '}
+                <code>POST /v1/agents/:agent_id/book/policy</code>. Demo keys cannot write policy.
+              </p>
+              <div className="book-policy-form" style={{ display: 'grid', gap: '0.75rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={killSwitch}
+                    onChange={(e) => setKillSwitch(e.target.checked)}
+                  />
+                  Kill switch — block all metered spend
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem' }}>
+                  <input
+                    type="checkbox"
+                    checked={requirePaymentRef}
+                    onChange={(e) => setRequirePaymentRef(e.target.checked)}
+                  />
+                  Require payment ref — pause spend when ledger rows lack <code>payment.ref</code>
+                </label>
+                <label className="book-field">
+                  <span className="book-field-label">Daily cap (USDC, UTC midnight reset)</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="empty = no daily cap"
+                    value={dailyCapDraft}
+                    onChange={(e) => setDailyCapDraft(e.target.value)}
+                  />
+                </label>
+                <label className="book-field">
+                  <span className="book-field-label">Hourly cap (USDC, clock hour UTC)</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="empty = no hourly cap"
+                    value={hourlyCapDraft}
+                    onChange={(e) => setHourlyCapDraft(e.target.value)}
+                  />
+                </label>
+                <label className="book-field">
+                  <span className="book-field-label">Model allowlist (comma-separated)</span>
+                  <input
+                    className="input"
+                    type="text"
+                    placeholder="e.g. theta/qwen3, akash/llama"
+                    value={modelAllowlistDraft}
+                    onChange={(e) => setModelAllowlistDraft(e.target.value)}
+                  />
+                </label>
+                <label className="book-field">
+                  <span className="book-field-label">Tier-2 above (USDC) — require <code>proof_tier</code> at/above</span>
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="empty = no tier-2 floor"
+                    value={tier2AboveDraft}
+                    onChange={(e) => setTier2AboveDraft(e.target.value)}
+                  />
+                </label>
+              </div>
+              <div style={{ marginTop: '0.75rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={policySaving}
+                  onClick={() => void handleSavePolicy()}
+                >
+                  {policySaving ? 'Saving…' : 'Save policy'}
+                </button>
+                {policy?.updated_at && (
+                  <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', alignSelf: 'center' }}>
+                    last updated {formatCollectedAt(policy.updated_at)}
+                  </span>
+                )}
+              </div>
+              {policyMessage && (
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.75rem' }}>{policyMessage}</p>
+              )}
+            </section>
+
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.75rem' }}>Accounting export</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
+                Download collected rows for funds, DAOs, or design partners. Each row links to{' '}
+                <code>verify_url</code> and per-receipt <code>?format=auditor</code> selective disclosure.
+                On-chain attestation = <code>payment.ref</code> + issuer JWS — verify offline.
+              </p>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => void handleExport('csv')}>
+                  Download CSV
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleExport('json')}>
+                  JSON audit pack
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => void handleExport('html')}>
+                  Print audit (HTML)
+                </button>
+              </div>
+              {exportMessage && (
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.75rem' }}>{exportMessage}</p>
+              )}
+            </section>
+
             <div className="grid grid-2" style={{ marginBottom: '1.5rem' }}>
               <section className="card">
                 <h3 style={{ marginBottom: '0.75rem' }}>Burn rate (24h)</h3>
@@ -524,9 +752,9 @@ export default function Book() {
           <summary>What is the {productName} book?</summary>
           <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginTop: '0.75rem', maxWidth: '40rem' }}>
             The book is the last-N collected spend for an agent session. Each entry records the hub,
-            the model, and the amount in USDC. The payer holds the book — no dashboard export, no
-            vendor report. Signed receipts include a public <code>verify_url</code>; SP1 is on demand,
-            not every call.
+            the model, and the amount in USDC. The payer holds the book. Policy caps and audit export
+            sit beside the book — not inside the router. Signed receipts include a public{' '}
+            <code>verify_url</code>; SP1 is on demand, not every call.
           </p>
         </details>
 

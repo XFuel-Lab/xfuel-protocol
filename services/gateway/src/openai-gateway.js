@@ -20,7 +20,7 @@ import {
 } from './edgecloud-infer.js';
 import { inferAkashML, akashmlApiKey } from './akashml-infer.js';
 import { normalizeUsage, messagesToText } from './usage.js';
-import { runX402Handshake, extractPaymentHeader } from './x402-server.js';
+import { runX402Handshake, extractPaymentHeader, priceUSDCResolved } from './x402-server.js';
 import { measureCogs, rateForModel } from './provider-rates.js';
 import { publishedPrice } from './pricing.js';
 import { getFloatManager } from './provider-float.js';
@@ -31,6 +31,7 @@ import {
   remainingBlocksDoor,
   capViewOf,
 } from './agent-book.js';
+import { enforcePolicy } from './book-policy.js';
 
 /**
  * XFuel OpenAI-compatible gateway.
@@ -183,6 +184,7 @@ async function meterV1Request(req, res, {
   resourcePath = '/v1/chat/completions',
   ledger = null,
   registry = null,
+  bookPolicy = null,
 } = {}) {
   // When isAuthorised is passed, we use it to determine if the request is exempt.
   // Otherwise, fall back to the config-gated behavior for backward compat.
@@ -222,6 +224,38 @@ async function meterV1Request(req, res, {
           cap: caps.cap,
           spent: caps.spent,
           remaining: caps.remaining,
+        },
+      });
+      return { halted: true };
+    }
+  }
+
+  // Book policy rows (caps, kill switch, tier2_above) — beside the book, not the router.
+  if (bookable && bookPolicy) {
+    let quotedAmount = '0';
+    try {
+      quotedAmount = await priceUSDCResolved(req.body || {});
+    } catch {
+      quotedAmount = String(config.x402?.usdcFloor ?? config.x402?.usdcPriceDefault ?? '2000');
+    }
+    const proofTier = req.body?.proof_tier ?? req.body?.xfuel?.proof_tier ?? null;
+    const policyCheck = enforcePolicy(
+      bookable.agent_id,
+      {
+        model: req.body?.model,
+        amount: quotedAmount,
+        proof_tier: proofTier,
+      },
+      { policy: bookPolicy, ledger },
+    );
+    if (!policyCheck.allowed) {
+      res.status(403).json({
+        error: {
+          message: policyCheck.reason,
+          type: 'policy_violation',
+          code: policyCheck.code,
+          agent_id: bookable.agent_id,
+          ...policyCheck,
         },
       });
       return { halted: true };
@@ -1189,7 +1223,7 @@ function priceForCatalogModel(m) {
 
 export function registerOpenAIRoutes(app, {
   rateLimit, authenticate, isAuthorised, ledger = null, registry = null,
-  sessionStore = null,
+  sessionStore = null, bookPolicy = null,
 } = {}) {
   // Base middleware chain for all /v1 routes (no auth — that's route-specific)
   const baseChain = [openAiErrorShape, bearerToApiKey, rateLimit].filter(Boolean);
@@ -1266,7 +1300,7 @@ export function registerOpenAIRoutes(app, {
     let metering = { halted: false, payment: null };
     if (!paymentHeader) {
       metering = await meterV1Request(req, res, {
-        taskId, isAuthorised, resourcePath, ledger, registry,
+        taskId, isAuthorised, resourcePath, ledger, registry, bookPolicy,
       });
       if (metering.meteringError) {
         return respondMeteringFailure(res, {
@@ -1372,7 +1406,7 @@ export function registerOpenAIRoutes(app, {
     // Payment present: settle only after the body is valid (Bankr: don't settle then 400).
     if (paymentHeader) {
       metering = await meterV1Request(req, res, {
-        taskId, isAuthorised, resourcePath, ledger, registry,
+        taskId, isAuthorised, resourcePath, ledger, registry, bookPolicy,
       });
       if (metering.meteringError) {
         return respondMeteringFailure(res, {
@@ -1775,7 +1809,7 @@ export function registerOpenAIRoutes(app, {
     // Payment present: settle only after the body is valid
     if (paymentHeader) {
       metering = await meterV1Request(req, res, {
-        taskId, isAuthorised, resourcePath: '/v1/responses', ledger, registry,
+        taskId, isAuthorised, resourcePath: '/v1/responses', ledger, registry, bookPolicy,
       });
       if (metering.meteringError) {
         return respondMeteringFailure(res, {

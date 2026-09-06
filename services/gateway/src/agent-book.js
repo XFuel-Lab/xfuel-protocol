@@ -11,8 +11,9 @@
  */
 
 import crypto from 'crypto';
-import { clampBookLimit } from './usage-settled.js';
+import { clampBookLimit, BOOK_MAX_LIMIT } from './usage-settled.js';
 import { DEFAULT_FLOOR_UNITS } from './pricing.js';
+import { buildVerifyUrl, explorerUrlForRef } from './receipt.js';
 
 export { clampBookLimit, BOOK_DEFAULT_LIMIT, BOOK_MAX_LIMIT } from './usage-settled.js';
 
@@ -413,5 +414,176 @@ export function bindBookVerifier(registry) {
       return { checked: true, valid };
     }
     return { checked: false, valid: null };
+  };
+}
+
+/**
+ * Build CSV export of collected book rows for accounting / audit.
+ * @param {object[]} entries — raw ledger entries
+ * @param {number} agentId
+ * @param {string} baseUrl — gateway public base for verify_url
+ */
+export function buildBookExportCsv(entries, agentId, baseUrl) {
+  const header = 'task_id,collected_at,hub,model,amount,payment_ref,rail,verify_url,explorer_url';
+  const lines = [header];
+  for (const e of entries) {
+    const row = rowOf(e);
+    const verifyUrl = buildVerifyUrl(baseUrl, row.task_id);
+    const explorerUrl = explorerUrlForRef(row.payment.ref) || '';
+    const cols = [
+      row.task_id,
+      row.collected_at || '',
+      row.route?.hub || '',
+      row.route?.model || '',
+      row.payment.amount || '',
+      row.payment.ref || '',
+      row.payment.rail || '',
+      verifyUrl,
+      explorerUrl,
+    ].map(csvEscape);
+    lines.push(cols.join(','));
+  }
+  return lines.join('\n');
+}
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  if (s.includes(',') || s.includes('"') || s.includes('\n')) {
+    return `"${s.replace(/"/g, '""')}"`;
+  }
+  return s;
+}
+
+/**
+ * Build JSON audit pack for a book slice.
+ * @param {object[]} entries
+ * @param {number} agentId
+ * @param {string} baseUrl
+ * @param {{ policy?: object|null, totals?: object }} [opts]
+ */
+export function buildBookAuditPack(entries, agentId, baseUrl, { policy = null, totals = null } = {}) {
+  const rows = entries.map((e) => {
+    const row = rowOf(e);
+    return {
+      task_id: row.task_id,
+      collected_at: row.collected_at,
+      hub: row.route?.hub || null,
+      model: row.route?.model || null,
+      amount: row.payment.amount,
+      payment_ref: row.payment.ref,
+      rail: row.payment.rail,
+      verify_url: buildVerifyUrl(baseUrl, row.task_id),
+      auditor_url: `${buildVerifyUrl(baseUrl, row.task_id)}?format=auditor`,
+      explorer_url: explorerUrlForRef(row.payment.ref),
+    };
+  });
+  return {
+    schema: 'chit402.book_audit.v1',
+    agent_id: Number(agentId),
+    exported_at: new Date().toISOString(),
+    row_count: rows.length,
+    totals: totals || totalsOf(entries),
+    policy: policy || null,
+    rows,
+    attestation_note:
+      'On-chain attestation is payment.ref + verify_url + issuer JWS on each receipt. '
+      + 'Verify offline; no separate attestation chain in v1.',
+  };
+}
+
+/**
+ * Print-friendly HTML for audit pack (Print to PDF).
+ * @param {object} pack — from buildBookAuditPack
+ */
+export function renderBookAuditHtml(pack) {
+  const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const rows = (pack.rows || []).map((r) => `
+    <tr>
+      <td>${esc(r.collected_at)}</td>
+      <td>${esc(r.hub)}</td>
+      <td><code>${esc(r.model)}</code></td>
+      <td style="text-align:right;font-family:monospace">${esc(r.amount)}</td>
+      <td><a href="${esc(r.explorer_url || '#')}">${esc(r.payment_ref)}</a></td>
+      <td><a href="${esc(r.verify_url)}">receipt</a> · <a href="${esc(r.auditor_url)}">auditor</a></td>
+    </tr>`).join('');
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<title>Book audit — agent ${esc(pack.agent_id)}</title>
+<style>
+  @media print { body { margin: 0.5in; } }
+  body { font-family: system-ui, sans-serif; font-size: 12px; color: #111; max-width: 900px; margin: 2rem auto; }
+  h1 { font-size: 1.25rem; }
+  table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+  th, td { border-bottom: 1px solid #ddd; padding: 0.4rem 0.5rem; text-align: left; }
+  th { font-size: 0.75rem; text-transform: uppercase; color: #666; }
+  .meta { color: #666; font-size: 0.85rem; margin: 0.5rem 0 1rem; }
+  .note { background: #f5f5f5; padding: 0.75rem; border-radius: 4px; font-size: 0.85rem; margin-top: 1.5rem; }
+</style>
+</head><body>
+<h1>Chit402 book audit — agent ${esc(pack.agent_id)}</h1>
+<p class="meta">Exported ${esc(pack.exported_at)} · ${esc(pack.row_count)} rows · schema ${esc(pack.schema)}</p>
+<table>
+  <thead><tr><th>Time</th><th>Hub</th><th>Model</th><th>Amount (µUSDC)</th><th>Payment</th><th>Links</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<p class="note">${esc(pack.attestation_note)}</p>
+</body></html>`;
+}
+
+/**
+ * Possession-gated book export (CSV, JSON audit pack, or print HTML).
+ *
+ * @param {number|string} agentId
+ * @param {{ session?: string|null, proof?: string|null, limit?: number, format?: string }} claim
+ * @param {{ ledger, verify, registry?, policyStore?, baseUrl? }} deps
+ */
+export function exportAgentBook(agentId, claim = {}, { ledger, verify, registry, policyStore, baseUrl } = {}) {
+  const window = clampBookLimit(claim.limit ?? BOOK_MAX_LIMIT);
+  const session = claim.session ? String(claim.session) : null;
+  const proof = claim.proof ? String(claim.proof) : null;
+  if (!session && !proof) {
+    return { status: 401, body: null };
+  }
+
+  const id = Number(agentId);
+  if (!Number.isInteger(id) || id < 1) {
+    return { status: 403, body: null };
+  }
+  if (typeof verify !== 'function' || !ledger) {
+    return { status: 403, body: null };
+  }
+
+  const checked = verify({ agentId: id, window, session, proof });
+  if (!checked || checked.checked !== true || checked.valid !== true) {
+    return { status: 403, body: null };
+  }
+
+  const format = String(claim.format || 'csv').toLowerCase();
+  const entries = ledger.listByAgent(id, { limit: window });
+  const policy = typeof policyStore?.get === 'function' ? policyStore.get(id) : null;
+  const pubBase = baseUrl || '';
+
+  if (format === 'json') {
+    return {
+      status: 200,
+      contentType: 'application/json',
+      body: buildBookAuditPack(entries, id, pubBase, { policy, totals: totalsOf(entries) }),
+    };
+  }
+  if (format === 'html') {
+    const pack = buildBookAuditPack(entries, id, pubBase, { policy, totals: totalsOf(entries) });
+    return {
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: renderBookAuditHtml(pack),
+    };
+  }
+  // default: csv
+  return {
+    status: 200,
+    contentType: 'text/csv; charset=utf-8',
+    filename: `chit402-book-${id}.csv`,
+    body: buildBookExportCsv(entries, id, pubBase),
   };
 }

@@ -80,7 +80,122 @@ export type FetchBookResult =
 
 export type { BurnRate, ModelMixItem };
 
-/** POST /v1/agents/:agent_id/book with possession session. */
+export interface BookPolicy {
+  agent_id?: number;
+  daily_cap?: { limit: string; reset_at: string };
+  hourly_cap?: { limit: string; reset_at: string };
+  model_allowlist?: string[];
+  kill_switch?: boolean;
+  require_payment_ref?: boolean;
+  tier2_above?: { threshold: string };
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BookPolicyResponse {
+  agent_id: number;
+  policy: BookPolicy | null;
+}
+
+export type PolicyType =
+  | 'daily_cap'
+  | 'hourly_cap'
+  | 'model_allowlist'
+  | 'kill_switch'
+  | 'require_payment_ref'
+  | 'tier2_above';
+
+/** GET /v1/agents/:agent_id/book/policy */
+export async function fetchBookPolicy(
+  apiV1: string,
+  params: { agentId: number; session: string },
+): Promise<{ ok: true; data: BookPolicyResponse } | { ok: false; error: BookFetchError; status?: number }> {
+  const url = `${apiV1.replace(/\/$/, '')}/agents/${params.agentId}/book/policy`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-XFuel-Session': params.session },
+    });
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+  if (res.status === 401) return { ok: false, error: 'unauth', status: 401 };
+  if (res.status === 403) return { ok: false, error: 'forbidden', status: 403 };
+  if (!res.ok) return { ok: false, error: 'network', status: res.status };
+  try {
+    const data = (await res.json()) as BookPolicyResponse;
+    return { ok: true, data };
+  } catch {
+    return { ok: false, error: 'parse', status: res.status };
+  }
+}
+
+/** POST /v1/agents/:agent_id/book/policy */
+export async function setBookPolicy(
+  apiV1: string,
+  params: { agentId: number; session: string; policyType: PolicyType; value: unknown },
+): Promise<{ ok: true; data: BookPolicyResponse } | { ok: false; error: BookFetchError; status?: number; message?: string }> {
+  const url = `${apiV1.replace(/\/$/, '')}/agents/${params.agentId}/book/policy`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XFuel-Session': params.session,
+      },
+      body: JSON.stringify({ session: params.session, policy_type: params.policyType, value: params.value }),
+    });
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+  if (res.status === 401) return { ok: false, error: 'unauth', status: 401 };
+  if (res.status === 403) return { ok: false, error: 'forbidden', status: 403 };
+  if (!res.ok) {
+    try {
+      const err = await res.json() as { message?: string };
+      return { ok: false, error: 'network', status: res.status, message: err.message };
+    } catch {
+      return { ok: false, error: 'network', status: res.status };
+    }
+  }
+  try {
+    const data = (await res.json()) as BookPolicyResponse;
+    return { ok: true, data };
+  } catch {
+    return { ok: false, error: 'parse', status: res.status };
+  }
+}
+
+/** GET /v1/agents/:agent_id/book/export */
+export async function fetchBookExport(
+  apiV1: string,
+  params: { agentId: number; session: string; format?: 'csv' | 'json' | 'html'; limit?: number },
+): Promise<{ ok: true; blob: Blob; filename?: string } | { ok: false; error: BookFetchError; status?: number }> {
+  const fmt = params.format || 'csv';
+  const qs = new URLSearchParams({ format: fmt });
+  if (params.limit != null) qs.set('limit', String(params.limit));
+  const url = `${apiV1.replace(/\/$/, '')}/agents/${params.agentId}/book/export?${qs}`;
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: { 'X-XFuel-Session': params.session },
+    });
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+  if (res.status === 401) return { ok: false, error: 'unauth', status: 401 };
+  if (res.status === 403) return { ok: false, error: 'forbidden', status: 403 };
+  if (!res.ok) return { ok: false, error: 'network', status: res.status };
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="([^"]+)"/);
+  return { ok: true, blob, filename: match?.[1] };
+}
+
+/** POST /v1/agents/:agent_id/book — with possession session. */
 export async function fetchAgentBook(
   apiV1: string,
   params: FetchBookParams,

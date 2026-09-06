@@ -60,7 +60,7 @@ import { CHIT402_ICON_SVG, XFUEL_ICON_SVG } from './xfuel-icon.js';
 import { buildAgentCard } from './agent-card.js';
 import { AgentRegistry, registerAgent } from './agent-registry.js';
 import { UsageSettledLedger } from './usage-settled.js';
-import { readAgentBook, claimFromRequest, bindBookVerifier, setAgentBudget, queryLineage, packBook } from './agent-book.js';
+import { readAgentBook, claimFromRequest, bindBookVerifier, setAgentBudget, queryLineage, packBook, exportAgentBook } from './agent-book.js';
 import { BookPolicyStore, POLICY_TYPES, enforcePolicy } from './book-policy.js';
 import { BookAssignmentStore, GRANT_TYPES, readSliceByToken } from './book-assign.js';
 import { BookDisputeStore, CLAIM_TYPES, OUTCOME_TYPES, fileAndAdjudicate } from './book-dispute.js';
@@ -315,7 +315,8 @@ POST /v1/chat/completions is bait. A holder can prove: lineage, policy, assignme
 
 - GET|POST /v1/agents/:agent_id/book : last-N collected spend + budget Y / remaining. Possession-gated.
 - GET /v1/agents/:agent_id/book/lineage/:task_id : walk A→B→inference. A2A disputes need this.
-- GET|POST /v1/agents/:agent_id/book/policy : caps as rows. daily_cap, model_allowlist, kill_switch.
+- GET|POST /v1/agents/:agent_id/book/policy : caps as rows. daily_cap, hourly_cap, model_allowlist, kill_switch, require_payment_ref, tier2_above.
+- GET|POST /v1/agents/:agent_id/book/export : possession-gated CSV / JSON audit pack / print HTML. format=csv|json|html.
 - GET|POST /v1/agents/:agent_id/book/assign : grant read/collect of a slice to another owner.
 - GET /v1/book/slice?token= : read a slice by assignment token (no possession needed).
 - POST /v1/agents/:agent_id/book/dispute : file a dispute. claim_type: output_missing, wrong_model, double_charge.
@@ -3258,7 +3259,7 @@ export function createApp() {
   });
 
   // POST /v1/agents/:agent_id/book/policy — Possession-gated policy management
-  // Set daily_cap, model_allowlist, kill_switch. Demo keys never write policy rows.
+  // Set daily_cap, hourly_cap, model_allowlist, kill_switch, require_payment_ref, tier2_above.
   app.post('/v1/agents/:agent_id/book/policy', (req, res) => {
     try {
       const body = req.body || {};
@@ -3320,6 +3321,92 @@ export function createApp() {
     } catch (err) {
       logger.error({ err, reqId: req.id }, 'book policy get error');
       return res.status(403).end();
+    }
+  });
+
+  // GET|POST /v1/agents/:agent_id/book/export — possession-gated accounting export
+  app.get('/v1/agents/:agent_id/book/export', (req, res) => {
+    try {
+      const claim = claimFromRequest(req);
+      const session = claim.session;
+      const proof = claim.proof;
+      if (!session && !proof) {
+        return res.status(401).end();
+      }
+
+      const id = Number(req.params.agent_id);
+      const checked = verifyBook({ agentId: id, window: 50, session, proof });
+      if (!checked || checked.checked !== true || checked.valid !== true) {
+        return res.status(403).end();
+      }
+
+      const format = req.query.format || 'csv';
+      const limit = req.query.limit;
+      const baseUrl = baseUrlFromReq(req, config.service.publicBaseUrl, config.service.publicHosts);
+      const result = exportAgentBook(id, { session, proof, limit, format }, {
+        ledger: usageSettled,
+        verify: verifyBook,
+        registry: agentRegistry,
+        policyStore: bookPolicy,
+        baseUrl,
+      });
+      if (result.status !== 200) {
+        return res.status(result.status).end();
+      }
+      res.type(result.contentType);
+      if (result.filename) {
+        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      }
+      if (typeof result.body === 'object') {
+        return res.json(result.body);
+      }
+      return res.send(result.body);
+    } catch (err) {
+      logger.error({ err, reqId: req.id }, 'book export get error');
+      return res.status(500).json({ error: 'internal', message: err.message });
+    }
+  });
+
+  app.post('/v1/agents/:agent_id/book/export', (req, res) => {
+    try {
+      const body = req.body || {};
+      const claim = claimFromRequest(req);
+      const session = claim.session || body.session;
+      const proof = claim.proof || body.proof;
+      if (!session && !proof) {
+        return res.status(401).end();
+      }
+
+      const id = Number(req.params.agent_id);
+      const checked = verifyBook({ agentId: id, window: 50, session, proof });
+      if (!checked || checked.checked !== true || checked.valid !== true) {
+        return res.status(403).end();
+      }
+
+      const format = body.format || req.query.format || 'csv';
+      const limit = body.limit ?? req.query.limit;
+      const baseUrl = baseUrlFromReq(req, config.service.publicBaseUrl, config.service.publicHosts);
+      const result = exportAgentBook(id, { session, proof, limit, format }, {
+        ledger: usageSettled,
+        verify: verifyBook,
+        registry: agentRegistry,
+        policyStore: bookPolicy,
+        baseUrl,
+      });
+      if (result.status !== 200) {
+        return res.status(result.status).end();
+      }
+      res.type(result.contentType);
+      if (result.filename) {
+        res.setHeader('Content-Disposition', `attachment; filename="${result.filename}"`);
+      }
+      if (typeof result.body === 'object') {
+        return res.json(result.body);
+      }
+      return res.send(result.body);
+    } catch (err) {
+      logger.error({ err, reqId: req.id }, 'book export post error');
+      return res.status(500).json({ error: 'internal', message: err.message });
     }
   });
 
@@ -3548,6 +3635,7 @@ export function createApp() {
   registerOpenAIRoutes(app, {
     rateLimit, authenticate, isAuthorised, ledger: usageSettled, registry: agentRegistry,
     sessionStore,
+    bookPolicy,
   });
 
   // ── 404 fallback ────────────────────────────────────────────────────────
@@ -3555,7 +3643,7 @@ export function createApp() {
   app.use((_req, res) => {
     res.status(404).json({
       error: 'not_found',
-      message: 'Unknown endpoint. Available: POST /task-request, POST /task-quote, GET /prove-result, POST /a2a-message, POST /a2a-settle-fair-exchange, POST /erc8004/validate, POST /v1/agents/register, GET|POST /v1/agents/:agent_id/book, POST /v1/agents/:agent_id/book/ingest, GET /v1/agents/:agent_id/book/lineage/:task_id, GET|POST /v1/agents/:agent_id/book/policy, GET|POST /v1/agents/:agent_id/book/assign, DELETE /v1/agents/:agent_id/book/assign/:assignment_id, GET /v1/book/slice, GET|POST /v1/agents/:agent_id/book/dispute, POST /v1/agents/:agent_id/book/rotate, GET /task-status, GET /receipt/:taskId, GET /receipt/by-tx, POST /receipt/:taskId/session/handoff, GET /v1/sessions/:delegation_hash, POST /v1/sessions/:delegation_hash/challenge, POST /v1/sessions/:delegation_hash/act, POST /v1/sessions/revoke, PUT|GET|DELETE /webhook, GET /health, GET /stats, GET /stats/me, GET /llms.txt, GET /chit402-icon.svg, GET /.well-known/x402, GET /.well-known/x402list.txt, GET /.well-known/jwks.json, GET /.well-known/revocations, GET /.well-known/agent-card.json, GET /openapi.json, GET /v1/models, GET /v1/models/:id, GET|POST /v1/chat/completions, POST /v1/images/generations, POST /v1/audio/transcriptions',
+      message: 'Unknown endpoint. Available: POST /task-request, POST /task-quote, GET /prove-result, POST /a2a-message, POST /a2a-settle-fair-exchange, POST /erc8004/validate, POST /v1/agents/register, GET|POST /v1/agents/:agent_id/book, POST /v1/agents/:agent_id/book/ingest, GET /v1/agents/:agent_id/book/lineage/:task_id, GET|POST /v1/agents/:agent_id/book/policy, GET|POST /v1/agents/:agent_id/book/export, GET|POST /v1/agents/:agent_id/book/assign, DELETE /v1/agents/:agent_id/book/assign/:assignment_id, GET /v1/book/slice, GET|POST /v1/agents/:agent_id/book/dispute, POST /v1/agents/:agent_id/book/rotate, GET /task-status, GET /receipt/:taskId, GET /receipt/by-tx, POST /receipt/:taskId/session/handoff, GET /v1/sessions/:delegation_hash, POST /v1/sessions/:delegation_hash/challenge, POST /v1/sessions/:delegation_hash/act, POST /v1/sessions/revoke, PUT|GET|DELETE /webhook, GET /health, GET /stats, GET /stats/me, GET /llms.txt, GET /chit402-icon.svg, GET /.well-known/x402, GET /.well-known/x402list.txt, GET /.well-known/jwks.json, GET /.well-known/revocations, GET /.well-known/agent-card.json, GET /openapi.json, GET /v1/models, GET /v1/models/:id, GET|POST /v1/chat/completions, POST /v1/images/generations, POST /v1/audio/transcriptions',
     });
   });
 

@@ -16,6 +16,8 @@ import {
   privacyOf,
 } from '../src/receipt.js';
 import { AgentRegistry } from '../src/agent-registry.js';
+import { readAgentBook, bindBookVerifier } from '../src/agent-book.js';
+import { UsageSettledLedger, recordCollectedSpend } from '../src/usage-settled.js';
 
 // ─── Private Spend by Session ────────────────────────────────────────────────
 
@@ -78,6 +80,27 @@ describe('Private Spend by Session', () => {
     const privacy = privacyOf(task);
     assert.equal(privacy.mode, 'vendor_blind');
     assert.equal(privacy.trust, 'gateway');
+  });
+
+  test('book response includes private_spend when session verified', () => {
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry({ persist: false });
+    const receipt = {
+      schema: 'xfuel.receipt.v4',
+      task_id: 'ps-book-1',
+      payment: { rail: 'usdc', ref: 'base:0xps1', collected: true, gross_amount: '1000' },
+      route: { model: 'xfuel/auto', hub: 'mock' },
+    };
+    const recorded = recordCollectedSpend(receipt, { ledger, registry });
+    const book = readAgentBook(recorded.agent_id, { session: recorded.session }, {
+      ledger,
+      verify: bindBookVerifier(registry),
+      registry,
+    });
+    assert.equal(book.status, 200);
+    assert.equal(book.body.private_spend?.enabled, true);
+    assert.equal(book.body.private_spend?.mode, 'vendor_blind');
+    assert.match(book.body.private_spend?.note || '', /not prompt/i);
   });
 });
 

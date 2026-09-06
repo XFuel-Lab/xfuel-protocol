@@ -18,6 +18,7 @@ import AgentShop from './pages/AgentShop';
 import Book from './pages/Book';
 import BookBot from './pages/BookBot';
 import Register from './pages/Register';
+import PrivateSpendDocs from './pages/PrivateSpendDocs';
 import { isChitHost } from './hostConfig';
 
 function HomePage() {
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/docs/cloudflare" element={<CloudflareDocs />} />
         <Route path="/docs/openclaw" element={<OpenClawDocs />} />
         <Route path="/docs/acp" element={<AcpDocs />} />
+        <Route path="/docs/private-spend" element={<PrivateSpendDocs />} />
         <Route path="/docs/swarm-platforms" element={<SwarmPlatforms />} />
         <Route path="/docs/olas" element={<SwarmPlatforms />} />
         <Route path="/docs/theoriq" element={<SwarmPlatforms />} />

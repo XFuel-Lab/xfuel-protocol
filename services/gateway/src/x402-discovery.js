@@ -1107,6 +1107,56 @@ export function buildOpenApiSpec(baseUrl = '') {
           },
         },
       },
+      '/v1/agents/{agent_id}/book/escrow': {
+        post: {
+          operationId: 'bookEscrowHelper',
+          summary: 'Ledger escrow helper (high-value jobs)',
+          description:
+            'Possession-gated ledger escrow beside the book. Hold signal = collected x402 receipt '
+            + 'already on the book (not an on-chain escrow contract in v1). '
+            + 'Actions: open (record intent + required output hash and/or proof tier), '
+            + 'release (principal satisfied — verifies settlement metadata, not closed-weight model), '
+            + 'clawback (ties into dispute claim_types — stand vs refund instruction), '
+            + 'status. Demo keys rejected.',
+          tags: ['Agents'],
+          parameters: [{ name: 'agent_id', in: 'path', required: true, schema: { type: 'integer' } }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  required: ['action'],
+                  properties: {
+                    action: { type: 'string', enum: ['open', 'release', 'clawback', 'status'] },
+                    task_id: { type: 'string', description: 'Required for open; optional lookup for status/release/clawback' },
+                    escrow_id: { type: 'string' },
+                    amount: { type: 'string', description: 'USDC atomic units — optional validation against ledger' },
+                    expires_at: { type: 'string', format: 'date-time' },
+                    required: {
+                      type: 'object',
+                      properties: {
+                        output_hash: { type: 'string' },
+                        proof_tier: { type: 'string', enum: ['settlement', 'inference'] },
+                      },
+                    },
+                    claim_type: { type: 'string', enum: ['output_missing', 'wrong_model', 'double_charge'] },
+                    evidence: { type: 'object' },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'Escrow action completed (release/clawback/status).' },
+            201: { description: 'Escrow opened.' },
+            400: { description: 'Invalid action or release checks failed.' },
+            401: { description: 'No possession proof.' },
+            403: { description: 'Demo key or wrong proof.' },
+            404: { description: 'Escrow not found.' },
+          },
+        },
+      },
       '/v1/agents/{agent_id}/book/rotate': {
         post: {
           operationId: 'rotateBookSession',

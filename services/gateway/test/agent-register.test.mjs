@@ -17,7 +17,7 @@ process.env.X402_ENABLED = 'false';
 process.env.TASK_STORE_PERSIST = 'false';
 
 const { createApp } = await import('../src/server.js');
-const { canonicalSignedPayload, verifyReceiptHmac } = await import('../src/receipt.js');
+const { buildReceipt, canonicalSignedPayload, mergeReceiptView, verifyReceiptHmac } = await import('../src/receipt.js');
 const { AgentRegistry, registerAgent } = await import('../src/agent-registry.js');
 const { UsageSettledLedger, receiptQualifiesForLedger } = await import('../src/usage-settled.js');
 const { buildAgentCard } = await import('../src/agent-card.js');
@@ -98,6 +98,69 @@ test('register issues an integer agent_id', async () => {
   assert.equal(result.body.usage_settled.agent_id, result.body.agent_id);
   assert.equal(typeof result.body.session, 'string');
   assert.ok(result.body.session.length >= 32);
+});
+
+function slimCollectedTask(over = {}) {
+  const taskId = over.taskId || 'task-slim-paid';
+  const paymentRef = over.paymentRef || 'base:0x' + 'ab'.repeat(32);
+  return {
+    taskId,
+    status: 'completed',
+    createdAt: '2026-07-11T00:00:00.000Z',
+    updatedAt: '2026-07-11T00:00:05.000Z',
+    intent: {
+      type: 'inference_request',
+      model: 'llama-3-70b',
+      chainId: 'base',
+      amount: '1000000',
+      paymentRail: 'usdc',
+      paymentRef,
+      proofSystem: 'sp1',
+    },
+    feeAmount: '5000',
+    netAmount: '995000',
+    feeBps: 50,
+    result: { provider: 'theta-edgecloud', outputHash: '0x' + 'ab'.repeat(32) },
+    meta: { chain: 'base', provider: 'theta-edgecloud' },
+    ...over,
+  };
+}
+
+test('mergeReceiptView hydrates slim buildReceipt for ledger qualification', () => {
+  const slim = buildReceipt(slimCollectedTask(), {
+    baseUrl: 'https://api.xfuel.app',
+    signingSecret: VERIFY_KEY,
+    persistSignature: true,
+  });
+  assert.equal(!slim.payment, true, 'slim envelope omits top-level payment');
+  assert.equal(slim.payment_meta?.collected, true);
+
+  const hydrated = mergeReceiptView(slim);
+  assert.equal(hydrated.payment.collected, true);
+  assert.equal(hydrated.payment.ref, 'base:0x' + 'ab'.repeat(32));
+  assert.equal(receiptQualifiesForLedger(hydrated).ok, true);
+
+  const hmac = verifyReceiptHmac(hydrated, VERIFY_KEY, { sigField: 'hmac_attestation' });
+  assert.equal(hmac.checked, true);
+  assert.equal(hmac.valid, true, 'HMAC verify works on merged view');
+});
+
+test('register accepts loadReceipt-shaped slim envelope after mergeReceiptView', async () => {
+  const task = slimCollectedTask({ taskId: 'task-slim-register' });
+  const slim = buildReceipt(task, {
+    baseUrl: 'https://api.xfuel.app',
+    signingSecret: VERIFY_KEY,
+    persistSignature: true,
+  });
+  const hydrated = mergeReceiptView(slim);
+  const d = deps({ [task.taskId]: hydrated });
+  const result = await registerAgent(
+    { agentWallet: WALLET, task_id: task.taskId },
+    d,
+  );
+  assert.equal(result.ok, true);
+  assert.equal(result.status, 200);
+  assert.equal(d.ledger.entries.length, 1);
 });
 
 test('demo/unmetered receipt does not ledger-credit and does not register', async () => {

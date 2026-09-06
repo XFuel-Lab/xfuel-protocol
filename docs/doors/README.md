@@ -4,11 +4,20 @@ Entry points for agents and platforms. Each door is a self-contained install pat
 
 | Door | Status | Path |
 |------|--------|------|
-| Chat completions | live | `POST /v1/chat/completions` @ `https://api.chit402.com` |
-| MCP | live | `npx chit402-mcp` — `packages/mcp` |
-| Eliza plugin | live | `@xfuel/plugin-elizaos` — `packages/plugin-elizaos` |
+| Chat completions | **live** | `POST /v1/chat/completions` @ `https://api.chit402.com` |
+| MCP | **live** | `npx chit402-mcp` — `packages/mcp` |
+| Eliza plugin | **live** | `@xfuel/plugin-elizaos` — `packages/plugin-elizaos` |
 | **Bankr skill (print receipt)** | **shipped** | [`skills/chit402-receipt/`](../skills/chit402-receipt/) · [spec](./bankr-skill-spec.md) |
-| SDK | live | `npm install chit402-sdk` |
+| SDK | **live** | `npm install chit402-sdk` |
+| LangChain + AI SDK | **shipped** | `@xfuel/adapters` · [www `/docs/framework-adapters`](https://chit402.com/docs/framework-adapters) |
+| Cloudflare Agents | **shipped** | Sidecar + Worker · [www `/docs/cloudflare`](https://chit402.com/docs/cloudflare) |
+| OpenClaw | **shipped** | [`skills/openclaw-chit402/`](../skills/openclaw-chit402/) · [www `/docs/openclaw`](https://chit402.com/docs/openclaw) |
+| Virtuals ACP | **shipped** | [ACP stamp path](./acp-stamp-path.md) · [www `/docs/acp`](https://chit402.com/docs/acp) |
+| Olas / Theoriq | **shipped** | [Swarm beachhead](./later-adapters.md) · [www `/docs/swarm-platforms`](https://chit402.com/docs/swarm-platforms) |
+
+## Product law (every door)
+
+Beachhead: **chat-completions baseURL swap + USDC budget + verify_url**. Product is the book (possession receipt), not cheaper inference.
 
 ## Bankr — chit402-receipt
 
@@ -21,3 +30,12 @@ install the chit402-receipt skill from https://github.com/XFuel-Lab/chit402/tree
 Env: `CHIT_API_URL`, `CHIT_API_KEY`, `CHIT_MAX_USD_PER_CALL`, `CHIT_MAX_USD_SESSION`.
 
 Returns `verify_url` after x402 USDC settle on Base. Full spec: [bankr-skill-spec.md](./bankr-skill-spec.md).
+
+## Framework adapters
+
+```bash
+npm install chit402-adapters @langchain/openai
+# or: npm install chit402-adapters @ai-sdk/openai ai
+```
+
+See [later-adapters.md](./later-adapters.md) for Cloudflare, OpenClaw, ACP, and swarm doors.

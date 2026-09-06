@@ -1,0 +1,86 @@
+{
+  "name": "chit402-adapters",
+  "version": "0.1.0",
+  "description": "Chit402 framework adapters — LangChain and Vercel AI SDK helpers with verify_url extraction.",
+  "type": "module",
+  "main": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    },
+    "./langchain": {
+      "types": "./langchain.d.ts",
+      "import": "./langchain.js"
+    },
+    "./ai-sdk": {
+      "types": "./ai-sdk.d.ts",
+      "import": "./ai-sdk.js"
+    },
+    "./receipt": {
+      "types": "./receipt.d.ts",
+      "import": "./receipt.js"
+    },
+    "./ingest": {
+      "types": "./ingest.d.ts",
+      "import": "./ingest.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "langchain.js",
+    "langchain.d.ts",
+    "ai-sdk.js",
+    "ai-sdk.d.ts",
+    "receipt.js",
+    "receipt.d.ts",
+    "ingest.js",
+    "ingest.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "test": "node test.mjs"
+  },
+  "keywords": [
+    "chit402",
+    "langchain",
+    "ai-sdk",
+    "agents",
+    "receipts"
+  ],
+  "author": "XFuel Lab",
+  "license": "Apache-2.0",
+  "homepage": "https://chit402.com/docs/framework-adapters",
+  "bugs": {
+    "url": "https://github.com/XFuel-Lab/chit402/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/XFuel-Lab/chit402.git",
+    "directory": "packages/aliases/chit402-adapters"
+  },
+  "dependencies": {
+    "@xfuel/adapters": "^0.1.0"
+  },
+  "peerDependencies": {
+    "@ai-sdk/openai": "^1.0.0 || ^2.0.0",
+    "@langchain/openai": "^0.3.0 || ^0.4.0 || ^0.5.0 || ^0.6.0"
+  },
+  "peerDependenciesMeta": {
+    "@ai-sdk/openai": {
+      "optional": true
+    },
+    "@langchain/openai": {
+      "optional": true
+    }
+  }
+}

@@ -1,7 +1,23 @@
 import { Link } from 'react-router-dom';
 import type { CSSProperties } from 'react';
+import { getApiV1 } from '../apiHost';
+
+const installExample = `npm install chit402-elizaos
+# canonical: @xfuel/plugin-elizaos`;
+
+const characterExample = `{
+  "plugins": ["@xfuel/plugin-elizaos"],
+  "settings": {
+    "CHIT_API_URL": "https://api.chit402.com",
+    "CHIT_API_KEY": "chit402-demo",
+    "CHIT_MAX_USD_PER_CALL": "0.05",
+    "CHIT_MAX_USD_SESSION": "1.00"
+  }
+}`;
 
 export default function ElizaPlugin() {
+  const apiV1 = getApiV1();
+
   return (
     <div className="page docs-page">
       <div className="container" style={{ maxWidth: 720 }}>
@@ -9,48 +25,51 @@ export default function ElizaPlugin() {
           <span className="docs-kicker">Framework</span>
           <h1>Eliza plugin</h1>
           <p>
-            Coming soon: <code>@xfuel/plugin-elizaos</code> — route Eliza agent LLM spend through
-            Chit402 with USDC budget and collected <code>verify_url</code> receipts.
+            <code>@xfuel/plugin-elizaos</code> routes Eliza <code>TEXT_SMALL</code> /{' '}
+            <code>TEXT_LARGE</code> through Chit at <code>{apiV1}</code> with USDC budget caps and
+            collected <code>verify_url</code> receipts.
           </p>
         </header>
 
         <div className="docs-panel">
-          <h2>Status</h2>
-          <p>
-            The Eliza plugin is in a separate PR. Until it lands, point your agent at the wire
-            directly or use the SDK.
+          <h2>Install</h2>
+          <pre className="docs-code">
+            <code>{installExample}</code>
+          </pre>
+          <p style={styles.note}>
+            Registers at priority 100 so Chit wins for text generation. Actions:{' '}
+            <code>REGISTER_CHIT_AGENT</code>, <code>SHOW_CHIT_BOOK</code>.
           </p>
-          <div className="docs-actions">
-            <Link to="/docs/chit-in-15-lines" className="btn btn-primary btn-sm">
-              Chit in 15 lines
-            </Link>
-            <a
-              href="https://github.com/XFuel-Lab/chit402"
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-secondary btn-sm"
-            >
-              GitHub
-            </a>
-            <Link to="/" className="btn btn-secondary btn-sm">
-              Home
-            </Link>
-          </div>
         </div>
 
-        <p style={styles.footer}>
-          Package path will be <code>packages/plugin-elizaos</code> when shipped.
-        </p>
+        <div className="docs-panel">
+          <h2>Character snippet</h2>
+          <pre className="docs-code">
+            <code>{characterExample}</code>
+          </pre>
+        </div>
+
+        <div className="docs-actions">
+          <Link to="/docs/chit-in-15-lines" className="btn btn-primary btn-sm">
+            Chit in 15 lines
+          </Link>
+          <Link to="/docs/framework-adapters" className="btn btn-secondary btn-sm">
+            LangChain + AI SDK
+          </Link>
+          <a
+            href="https://github.com/XFuel-Lab/chit402/tree/main/packages/plugin-elizaos"
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-secondary btn-sm"
+          >
+            Source
+          </a>
+        </div>
       </div>
     </div>
   );
 }
 
 const styles: Record<string, CSSProperties> = {
-  footer: {
-    textAlign: 'center',
-    color: '#8a8a9a',
-    fontSize: '0.9rem',
-    marginTop: '2rem',
-  },
+  note: { marginTop: '0.75rem', fontSize: '0.9rem', opacity: 0.85 },
 };

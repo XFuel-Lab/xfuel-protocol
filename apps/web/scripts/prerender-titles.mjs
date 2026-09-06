@@ -30,7 +30,52 @@ const ROUTE_CONTENT = {
   '/docs/eliza': {
     title: 'Eliza plugin | Chit402',
     h1: 'Eliza plugin',
-    lede: 'Coming soon: @xfuel/plugin-elizaos — route Eliza agent LLM spend through Chit402 with USDC budget and collected verify_url receipts.',
+    lede: '@xfuel/plugin-elizaos routes Eliza TEXT_SMALL/LARGE through Chit402 with USDC budget caps and collected verify_url receipts.',
+  },
+  '/docs/framework-adapters': {
+    title: 'LangChain + AI SDK | Chit402',
+    h1: 'Framework adapters',
+    lede: 'Swap baseURL to api.chit402.com/v1, pay USDC on Base, hold verify_url. Thin helpers for LangChain ChatOpenAI and Vercel AI SDK createOpenAI.',
+  },
+  '/docs/langchain': {
+    title: 'LangChain adapter | Chit402',
+    h1: 'LangChain adapter',
+    lede: 'createChitChatOpenAI pointed at api.chit402.com/v1 with demo or paid key. Extract verify_url from xfuel extension or headers.',
+  },
+  '/docs/ai-sdk': {
+    title: 'Vercel AI SDK adapter | Chit402',
+    h1: 'AI SDK adapter',
+    lede: 'createChit wrapper for Vercel AI SDK — same Chit baseURL, USDC budget, verify_url receipt.',
+  },
+  '/docs/cloudflare': {
+    title: 'Cloudflare Agents | Chit402',
+    h1: 'Cloudflare Agents',
+    lede: 'Point Workers at api.chit402.com/v1 or run chit402-sidecar to stamp receipts from any upstream.',
+  },
+  '/docs/openclaw': {
+    title: 'OpenClaw skill | Chit402',
+    h1: 'OpenClaw',
+    lede: 'Pasteable OpenClaw SKILL.md — baseURL swap, USDC caps, return verify_url to the principal.',
+  },
+  '/docs/acp': {
+    title: 'Virtuals ACP | Chit402',
+    h1: 'Virtuals ACP',
+    lede: 'Keep ACP settle for agent commerce; route inference through Chit for hub, model, amount, verify_url.',
+  },
+  '/docs/swarm-platforms': {
+    title: 'Olas + Theoriq | Chit402',
+    h1: 'Swarm platforms',
+    lede: 'Olas and Theoriq runners — same beachhead: chat-completions baseURL swap, USDC budget, hold verify_url.',
+  },
+  '/docs/olas': {
+    title: 'Olas | Chit402',
+    h1: 'Olas',
+    lede: 'Point OpenAI-compatible clients at api.chit402.com/v1. Hold verify_url — no deep Olas fork.',
+  },
+  '/docs/theoriq': {
+    title: 'Theoriq | Chit402',
+    h1: 'Theoriq',
+    lede: 'Swarm orchestration stays yours; Chit402 is the inference receipt book.',
   },
   '/book': {
     title: 'Principal book — spend dashboard | Chit',

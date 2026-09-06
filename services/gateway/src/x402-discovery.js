@@ -621,7 +621,7 @@ export function buildX402Manifest(baseUrl = '') {
       agents_register: base ? `${base}/v1/agents/register` : '/v1/agents/register',
       openai_models: base ? `${base}/v1/models` : '/v1/models',
       quote: base ? `${base}/task-quote` : '/task-quote',
-      docs: 'https://github.com/XFuel-Lab/xfuel-protocol/blob/main/docs/M2M_API.md',
+      docs: 'https://github.com/XFuel-Lab/chit402/blob/main/docs/M2M_API.md',
     },
   };
 }

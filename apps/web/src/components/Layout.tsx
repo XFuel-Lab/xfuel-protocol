@@ -12,6 +12,8 @@ const xfuelNavLinks = [
 
 const chitNavLinks = [
   { to: '/', label: 'Home' },
+  { to: '/book', label: 'Book' },
+  { to: '/register', label: 'Register' },
   { to: '/docs/chit-in-15-lines', label: '15 lines' },
 ];
 

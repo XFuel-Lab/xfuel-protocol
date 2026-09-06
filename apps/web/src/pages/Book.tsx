@@ -1,101 +1,494 @@
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { getApiV1 } from '../apiHost';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { getApiHost, getApiV1 } from '../apiHost';
 import { getHostConfig } from '../hostConfig';
+import {
+  type AgentBookResponse,
+  type BookFetchError,
+  computeBurnRate,
+  computeModelMix,
+  fetchAgentBook,
+  formatCollectedAt,
+  formatUsdc,
+  parseUsdcInput,
+  summarizePaymentRef,
+  verifyUrlFor,
+  type ModelMixItem,
+} from '../lib/agentBook';
+import {
+  clearBookCredentials,
+  loadBookCredentials,
+  saveBookCredentials,
+} from '../lib/bookStorage';
 
-function getSnippet(apiV1: string) {
-  return `curl -sS ${apiV1}/chat/completions \\
-  -H "X-API-Key: xfuel-demo" \\
-  -H "Content-Type: application/json" \\
-  -d '{"model":"xfuel/auto","messages":[{"role":"user","content":"Say hello in 5 words."}],"max_tokens":32}'`;
+type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+const MODEL_COLORS = ['#00d4ff', '#8b5cf6', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6'];
+
+function errorCopy(error: BookFetchError): { title: string; body: string } {
+  if (error === 'unauth') {
+    return {
+      title: 'Possession required',
+      body: 'Add your agent session from POST /v1/agents/register. API keys and demo keys are not possession.',
+    };
+  }
+  if (error === 'forbidden') {
+    return {
+      title: 'Wrong possession or unknown agent',
+      body: 'The session does not match this agent_id, or the agent does not exist. There is no public index — check both values from your register response.',
+    };
+  }
+  return {
+    title: 'Could not reach the gateway',
+    body: 'Network or parse error talking to the book API. Retry when online.',
+  };
+}
+
+function budgetPct(spent: string, cap: string | null): number {
+  if (!cap) return 0;
+  try {
+    const s = BigInt(spent);
+    const c = BigInt(cap);
+    if (c <= 0n) return 0;
+    const pct = Number((s * 10000n) / c) / 100;
+    return Math.min(100, Math.max(0, pct));
+  } catch {
+    return 0;
+  }
 }
 
 export default function Book() {
   const config = getHostConfig();
   const productName = config.name;
+  const apiHost = getApiHost();
   const apiV1 = getApiV1();
-  const SNIPPET = getSnippet(apiV1);
+  const [searchParams] = useSearchParams();
+
+  const [agentIdInput, setAgentIdInput] = useState('');
+  const [sessionInput, setSessionInput] = useState('');
+  const [showSession, setShowSession] = useState(false);
+  const [loadState, setLoadState] = useState<LoadState>('idle');
+  const [fetchError, setFetchError] = useState<BookFetchError | null>(null);
+  const [book, setBook] = useState<AgentBookResponse | null>(null);
+  const [budgetDraft, setBudgetDraft] = useState('');
+  const [budgetSaving, setBudgetSaving] = useState(false);
+  const [budgetMessage, setBudgetMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    document.title = `The book: this agent spent Y on this job | ${productName}`;
+    document.title = `Principal book — spend dashboard | ${productName}`;
   }, [productName]);
 
+  useEffect(() => {
+    const saved = loadBookCredentials();
+    const fromUrl = searchParams.get('agent_id') ?? '';
+    const nextAgentId = fromUrl || saved.agentId;
+    const nextSession = saved.session;
+    setAgentIdInput(nextAgentId);
+    setSessionInput(nextSession);
+
+    const id = Number(nextAgentId.trim());
+    if (Number.isInteger(id) && id >= 1 && nextSession.trim()) {
+      void (async () => {
+        setLoadState('loading');
+        setFetchError(null);
+        const result = await fetchAgentBook(apiV1, { agentId: id, session: nextSession.trim(), limit: 50 });
+        if (!result.ok) {
+          setBook(null);
+          setFetchError(result.error);
+          setLoadState('error');
+          return;
+        }
+        setBook(result.data);
+        setLoadState('ready');
+        if (result.data.cap != null) {
+          setBudgetDraft(formatUsdc(result.data.cap));
+        }
+      })();
+    }
+  }, [apiV1, searchParams]);
+
+  const loadBook = useCallback(async (opts?: { budget?: string | null }) => {
+    const agentId = Number(agentIdInput.trim());
+    const session = sessionInput.trim();
+    if (!Number.isInteger(agentId) || agentId < 1 || !session) {
+      setLoadState('idle');
+      setBook(null);
+      setFetchError(null);
+      return;
+    }
+
+    saveBookCredentials({ agentId: String(agentId), session });
+    setLoadState('loading');
+    setFetchError(null);
+    setBudgetMessage(null);
+
+    const result = await fetchAgentBook(apiV1, {
+      agentId,
+      session,
+      limit: 50,
+      ...(opts && Object.prototype.hasOwnProperty.call(opts, 'budget') ? { budget: opts.budget } : {}),
+    });
+
+    if (!result.ok) {
+      setBook(null);
+      setFetchError(result.error);
+      setLoadState('error');
+      return;
+    }
+
+    setBook(result.data);
+    setLoadState('ready');
+    if (result.data.cap != null) {
+      setBudgetDraft(formatUsdc(result.data.cap));
+    } else {
+      setBudgetDraft('');
+    }
+  }, [agentIdInput, apiV1, sessionInput]);
+
+  const burnRate = useMemo(
+    () => (book ? computeBurnRate(book.entries, 24) : null),
+    [book],
+  );
+  const modelMix = useMemo(
+    () => (book ? computeModelMix(book.entries) : []),
+    [book],
+  );
+  const spentPct = book ? budgetPct(book.spent, book.cap) : 0;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void loadBook();
+  };
+
+  const handleSetBudget = async (clear: boolean) => {
+    const agentId = Number(agentIdInput.trim());
+    const session = sessionInput.trim();
+    if (!Number.isInteger(agentId) || agentId < 1 || !session) return;
+
+    let budget: string | null;
+    if (clear) {
+      budget = null;
+    } else {
+      const parsed = parseUsdcInput(budgetDraft);
+      if (parsed == null) {
+        setBudgetMessage('Enter a valid USDC amount (up to 6 decimals), or clear for unlimited.');
+        return;
+      }
+      budget = parsed;
+    }
+
+    setBudgetSaving(true);
+    setBudgetMessage(null);
+    const result = await fetchAgentBook(apiV1, { agentId, session, limit: 50, budget });
+    setBudgetSaving(false);
+
+    if (!result.ok) {
+      setBudgetMessage(errorCopy(result.error).body);
+      return;
+    }
+    setBook(result.data);
+    setBudgetMessage(clear ? 'Budget cleared — unlimited ceiling.' : 'Budget updated.');
+    if (result.data.cap != null) {
+      setBudgetDraft(formatUsdc(result.data.cap));
+    } else {
+      setBudgetDraft('');
+    }
+  };
+
+  const hasCredentials = agentIdInput.trim() && sessionInput.trim();
+
   return (
-    <div className="page docs-page">
-      <div className="container" style={{ maxWidth: 720 }}>
+    <div className="page docs-page book-dashboard">
+      <div className="container">
         <header className="page-header">
-          <span className="docs-kicker">The Book</span>
+          <span className="docs-kicker">Principal book</span>
           <h1>This agent spent Y on this job.</h1>
           <p>
-            {productName} is the book. Differentiator vs Hive / ComputeSeal / Paid.ai: a held book of
-            hub + model + amount after collected USDC, not a FinOps CSV. Demo never writes the
-            book. SP1 on demand, not every call. Receipt attests settlement and output hash,
-            not black-box correctness.
+            Possession-gated spend dashboard for the principal who funds agents. Last-N collected
+            rows from <code>GET|POST /v1/agents/:agent_id/book</code> — not a public index. Demo
+            never writes the book.
           </p>
         </header>
 
-        <section className="docs-section">
-          <h2>What is the {productName} book?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            The book is the last-N collected spend for an agent session. Each entry records the
-            hub, the model, and the amount in USDC. The payer holds the book—no dashboard export,
-            no vendor report. Possession-gated means only the session that paid can read it.
+        <section className="card book-access-card">
+          <h2 style={{ fontSize: '1.05rem', marginBottom: '0.75rem' }}>Hold the book</h2>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '1rem', maxWidth: '40rem' }}>
+            Enter <code>agent_id</code> and the possession <code>session</code> from{' '}
+            <code>POST /v1/agents/register</code> (issued after a collected receipt). Sent as{' '}
+            <code>X-XFuel-Session</code> — same credential the API already expects.
           </p>
+          <form onSubmit={handleSubmit} className="book-access-form">
+            <label className="book-field">
+              <span className="book-field-label">agent_id</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                step={1}
+                placeholder="e.g. 7"
+                value={agentIdInput}
+                onChange={(e) => setAgentIdInput(e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label className="book-field">
+              <span className="book-field-label">session (possession)</span>
+              <div className="book-session-row">
+                <input
+                  className="input"
+                  type={showSession ? 'text' : 'password'}
+                  placeholder="from register response"
+                  value={sessionInput}
+                  onChange={(e) => setSessionInput(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => setShowSession((v) => !v)}
+                >
+                  {showSession ? 'Hide' : 'Show'}
+                </button>
+              </div>
+            </label>
+            <div className="book-access-actions">
+              <button type="submit" className="btn btn-primary btn-sm" disabled={!hasCredentials || loadState === 'loading'}>
+                {loadState === 'loading' ? 'Loading…' : 'Load book'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  clearBookCredentials();
+                  setAgentIdInput('');
+                  setSessionInput('');
+                  setBook(null);
+                  setLoadState('idle');
+                  setFetchError(null);
+                }}
+              >
+                Clear
+              </button>
+            </div>
+          </form>
         </section>
 
-        <section className="docs-section">
-          <h2>How do I hold GET|POST /v1/agents/:agent_id/book?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            After a paid call, retrieve the book with <code>GET /v1/agents/:agent_id/book</code>{' '}
-            using the same session credentials that paid the 402. The response is the spend log:
-            hub, model, amount for each collected receipt. <code>POST</code> allows filtered
-            queries on the same data.
-          </p>
-        </section>
+        {!hasCredentials && loadState === 'idle' && (
+          <section className="card book-state-card">
+            <span className="badge badge-purple">No possession</span>
+            <h3 style={{ marginTop: '0.75rem' }}>You get nothing without the session</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', maxWidth: '36rem' }}>
+              The book is not a public scoreboard. Register after a paid call, then paste{' '}
+              <code>agent_id</code> and <code>session</code> above. Wrong or missing possession
+              returns 401/403 with an empty body.
+            </p>
+          </section>
+        )}
 
-        <section className="docs-section">
-          <h2>How is the book different from Hive, ComputeSeal, or Paid.ai?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            Hive, ComputeSeal, and Paid.ai export a FinOps CSV or billing dashboard. {productName}{' '}
-            returns a possession-gated API endpoint where you hold the book—hub, model, amount—
-            after USDC is collected. The book is held, not mailed. The receipt is HMAC-signed.
-          </p>
-        </section>
+        {loadState === 'error' && fetchError && (
+          <section className="card book-state-card">
+            <span className="badge badge-orange">{fetchError === 'forbidden' ? '403' : fetchError === 'unauth' ? '401' : 'Error'}</span>
+            <h3 style={{ marginTop: '0.75rem' }}>{errorCopy(fetchError).title}</h3>
+            <p style={{ color: 'var(--text-secondary)', marginTop: '0.5rem', maxWidth: '36rem' }}>
+              {errorCopy(fetchError).body}
+            </p>
+          </section>
+        )}
 
-        <section className="docs-section">
-          <h2>What does an HMAC-signed receipt prove?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            The receipt attests settlement and output hash. It proves the gateway collected USDC
-            and the output you received matches the hash in the receipt. It does not attest
-            black-box correctness of the model. SP1 proofs are on demand, not every call.
-          </p>
-        </section>
+        {loadState === 'ready' && book && (
+          <>
+            <section className="book-budget-strip">
+              <div className="card book-stat-card">
+                <div className="stat-label">Budget Y (cap)</div>
+                <div className="book-stat-value">{book.cap != null ? `$${formatUsdc(book.cap)}` : 'Unlimited'}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>{book.window}</div>
+              </div>
+              <div className="card book-stat-card">
+                <div className="stat-label">Spent</div>
+                <div className="book-stat-value">${formatUsdc(book.spent)}</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                  {book.totals.count} rows in window
+                </div>
+              </div>
+              <div className="card book-stat-card">
+                <div className="stat-label">Remaining</div>
+                <div className="book-stat-value">
+                  {book.remaining != null ? `$${formatUsdc(book.remaining)}` : '—'}
+                </div>
+                {book.allowance?.signature && (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '0.35rem', fontFamily: 'var(--font-mono)' }}>
+                    allowance signed
+                  </div>
+                )}
+              </div>
+            </section>
 
-        <section className="docs-section">
-          <h2>What never appears in the book?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            Demo calls. The demo key <code>xfuel-demo</code> skips payment and never writes to
-            the book. Only paid calls—USDC collected via HTTP 402—appear in the book.
-          </p>
-        </section>
+            {book.cap != null && (
+              <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
+                  <span style={{ color: 'var(--text-secondary)' }}>Ceiling used</span>
+                  <span style={{ fontFamily: 'var(--font-mono)' }}>{spentPct.toFixed(1)}%</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-bar-fill" style={{ width: `${spentPct}%` }} />
+                </div>
+              </div>
+            )}
 
-        <section className="docs-section">
-          <h2>What if I call the book without possession?</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7 }}>
-            You get nothing. The book is possession-gated. If you did not pay, you do not hold
-            the book. There is no public index of agent spend. No admin endpoint. No vendor
-            export.
-          </p>
-        </section>
+            <section className="card" style={{ marginBottom: '1.5rem' }}>
+              <h3 style={{ marginBottom: '0.75rem' }}>Set budget Y</h3>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', marginBottom: '0.75rem' }}>
+                POST with <code>budget</code> in USDC (6 dp). Raising Y lifts the prepaid ceiling; spent does not reset.
+              </p>
+              <div className="book-budget-form">
+                <input
+                  className="input"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="USDC amount (empty = unlimited)"
+                  value={budgetDraft}
+                  onChange={(e) => setBudgetDraft(e.target.value)}
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={budgetSaving}
+                  onClick={() => void handleSetBudget(false)}
+                >
+                  {budgetSaving ? 'Saving…' : 'Set budget'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={budgetSaving}
+                  onClick={() => void handleSetBudget(true)}
+                >
+                  Clear (unlimited)
+                </button>
+              </div>
+              {budgetMessage && (
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.75rem' }}>{budgetMessage}</p>
+              )}
+            </section>
 
-        <section className="docs-section" style={{ marginTop: '2rem' }}>
-          <h2>Try the demo</h2>
-          <p style={{ color: '#8a8a9a', lineHeight: 1.7, marginBottom: '1rem' }}>
-            Demo key <code>xfuel-demo</code> skips payment (15/min, 150/day). Demo never writes
-            the book. Windows: use <code>curl.exe</code>.
+            <div className="grid grid-2" style={{ marginBottom: '1.5rem' }}>
+              <section className="card">
+                <h3 style={{ marginBottom: '0.75rem' }}>Burn rate (24h)</h3>
+                {burnRate && burnRate.rowCount > 0 ? (
+                  <>
+                    <div style={{ fontFamily: 'var(--font-mono)', fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                      ${burnRate.perDay}<span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}> / day</span>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '0.5rem' }}>
+                      ${burnRate.perHour}/hr from {burnRate.rowCount} row{burnRate.rowCount === 1 ? '' : 's'} in the last {burnRate.windowHours}h
+                      (${formatUsdc(burnRate.spentUnits)} total)
+                    </p>
+                  </>
+                ) : (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
+                    No collected rows with timestamps in the last 24 hours.
+                  </p>
+                )}
+              </section>
+
+              <section className="card">
+                <h3 style={{ marginBottom: '0.75rem' }}>Model mix</h3>
+                {modelMix.length > 0 ? (
+                  <div className="book-model-mix">
+                    {modelMix.map((item: ModelMixItem, i: number) => (
+                      <div key={`${item.hub}-${item.model}`} className="book-mix-row">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.3rem' }}>
+                          <span>
+                            <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: '0.75rem' }}>{item.hub}</span>
+                            {' · '}
+                            {item.model}
+                          </span>
+                          <span style={{ fontFamily: 'var(--font-mono)' }}>{item.pct.toFixed(1)}%</span>
+                        </div>
+                        <div className="progress-bar" style={{ height: 6 }}>
+                          <div
+                            className="progress-bar-fill"
+                            style={{
+                              width: `${item.pct}%`,
+                              background: MODEL_COLORS[i % MODEL_COLORS.length],
+                            }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>No model data in this window.</p>
+                )}
+              </section>
+            </div>
+
+            <section className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+                <h3>Last {book.entries.length} collected rows</h3>
+                <span className="badge badge-cyan">agent {book.agent_id}</span>
+              </div>
+
+              {book.entries.length === 0 ? (
+                <p style={{ color: 'var(--text-secondary)' }}>
+                  Possession verified, but no collected spend rows yet. Paid calls (USDC via 402) appear here; demo never writes.
+                </p>
+              ) : (
+                <div className="book-table-wrap">
+                  <table className="book-table">
+                    <thead>
+                      <tr>
+                        <th>Time</th>
+                        <th>Hub</th>
+                        <th>Model</th>
+                        <th>Amount</th>
+                        <th>Payment</th>
+                        <th>Receipt</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {book.entries.map((row) => {
+                        const verifyUrl = verifyUrlFor(row.task_id, apiHost);
+                        const amount = row.payment.amount;
+                        return (
+                          <tr key={row.task_id}>
+                            <td data-label="Time">{formatCollectedAt(row.collected_at)}</td>
+                            <td data-label="Hub">{row.route?.hub ?? '—'}</td>
+                            <td data-label="Model" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                              {row.route?.model ?? '—'}
+                            </td>
+                            <td data-label="Amount" style={{ fontFamily: 'var(--font-mono)' }}>
+                              ${formatUsdc(amount)}
+                            </td>
+                            <td data-label="Payment" style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem' }}>
+                              {summarizePaymentRef(row.payment.ref, row.payment.rail)}
+                            </td>
+                            <td data-label="Receipt">
+                              <a href={verifyUrl} target="_blank" rel="noopener noreferrer">
+                                verify
+                              </a>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          </>
+        )}
+
+        <details className="book-blurb" style={{ marginTop: '2rem' }}>
+          <summary>What is the {productName} book?</summary>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.7, marginTop: '0.75rem', maxWidth: '40rem' }}>
+            The book is the last-N collected spend for an agent session. Each entry records the hub,
+            the model, and the amount in USDC. The payer holds the book — no dashboard export, no
+            vendor report. Signed receipts include a public <code>verify_url</code>; SP1 is on demand,
+            not every call.
           </p>
-          <pre className="docs-code"><code>{SNIPPET}</code></pre>
-        </section>
+        </details>
 
         <nav style={{ marginTop: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <Link to="/v1" className="btn btn-primary btn-sm">/v1 gateway →</Link>

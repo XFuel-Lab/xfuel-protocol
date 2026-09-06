@@ -63,6 +63,12 @@ export interface AgentBookResponse {
     as_of: string;
     signature: { alg: string; value: string };
   };
+  private_spend?: {
+    enabled: boolean;
+    mode: string;
+    trust: string;
+    note: string;
+  };
 }
 
 export type BookFetchError = 'unauth' | 'forbidden' | 'network' | 'parse';
@@ -236,4 +242,113 @@ export async function fetchAgentBook(
 /** Default verify URL host for helpers that need it. */
 export function defaultApiHost(): string {
   return getApiHost();
+}
+
+export interface BookEscrowRecord {
+  escrow_id: string;
+  agent_id: number;
+  task_id: string;
+  amount: string;
+  status: 'open' | 'released' | 'clawed_back' | 'expired';
+  hold: { kind: string; payment_ref?: string; rail?: string; note?: string };
+  required: { output_hash?: string; proof_tier?: string };
+  expires_at: string;
+  verify_url?: string | null;
+  ledger_escrow?: boolean;
+  dispute_id?: string | null;
+  refund_instruction?: object | null;
+  verification?: object | null;
+  opened_at?: string;
+  closed_at?: string | null;
+  close_reason?: string | null;
+}
+
+export interface EscrowActionParams {
+  action: 'open' | 'release' | 'clawback' | 'status';
+  task_id?: string;
+  escrow_id?: string;
+  amount?: string;
+  expires_at?: string;
+  required?: { output_hash?: string; proof_tier?: 'settlement' | 'inference' };
+  claim_type?: 'output_missing' | 'wrong_model' | 'double_charge';
+  evidence?: Record<string, unknown>;
+}
+
+export type EscrowActionResult =
+  | {
+      ok: true;
+      escrow?: BookEscrowRecord;
+      checks?: object;
+      dispute?: object;
+      disclaimer?: string;
+    }
+  | {
+      ok: false;
+      error: BookFetchError | 'escrow';
+      message?: string;
+      status?: number;
+      escrow?: BookEscrowRecord;
+      disclaimer?: string;
+    };
+
+/** POST /v1/agents/:agent_id/book/escrow with possession session. */
+export async function bookEscrowAction(
+  apiV1: string,
+  auth: { agentId: number; session: string },
+  params: EscrowActionParams,
+): Promise<EscrowActionResult> {
+  const url = `${apiV1.replace(/\/$/, '')}/agents/${auth.agentId}/book/escrow`;
+  const body: Record<string, unknown> = {
+    session: auth.session,
+    action: params.action,
+  };
+  if (params.task_id) body.task_id = params.task_id;
+  if (params.escrow_id) body.escrow_id = params.escrow_id;
+  if (params.amount) body.amount = params.amount;
+  if (params.expires_at) body.expires_at = params.expires_at;
+  if (params.required) body.required = params.required;
+  if (params.claim_type) body.claim_type = params.claim_type;
+  if (params.evidence) body.evidence = params.evidence;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-XFuel-Session': auth.session,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    return { ok: false, error: 'network' };
+  }
+
+  let data: Record<string, unknown> = {};
+  try {
+    data = (await res.json()) as Record<string, unknown>;
+  } catch {
+    if (!res.ok) return { ok: false, error: 'network', status: res.status };
+  }
+
+  if (res.status === 401) return { ok: false, error: 'unauth', status: 401 };
+  if (res.status === 403) return { ok: false, error: 'forbidden', status: 403 };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: 'escrow',
+      message: typeof data.message === 'string' ? data.message : 'Escrow request failed',
+      status: res.status,
+      escrow: data.escrow as BookEscrowRecord | undefined,
+      disclaimer: typeof data.disclaimer === 'string' ? data.disclaimer : undefined,
+    };
+  }
+
+  return {
+    ok: true,
+    escrow: data.escrow as BookEscrowRecord | undefined,
+    checks: data.checks as object | undefined,
+    dispute: data.dispute as object | undefined,
+    disclaimer: typeof data.disclaimer === 'string' ? data.disclaimer : undefined,
+  };
 }

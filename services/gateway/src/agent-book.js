@@ -193,6 +193,12 @@ export function packBook(entries, agentId, limit, extra = {}) {
   };
   if (extra.session) {
     body.allowance = packAllowance(agentId, caps.remaining, extra.session);
+    body.private_spend = {
+      enabled: true,
+      mode: 'vendor_blind',
+      trust: 'gateway',
+      note: 'Gateway-trusted vendor blind — not prompt confidentiality.',
+    };
   }
   return body;
 }

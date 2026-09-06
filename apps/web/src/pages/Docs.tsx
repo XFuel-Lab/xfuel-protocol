@@ -46,6 +46,20 @@ const startHere: DocLink[] = [
 
 const builders: DocLink[] = [
   {
+    title: 'Private Spend',
+    description: 'vendor_blind for possession sessions — topology privacy, not prompt encryption.',
+    href: '/docs/private-spend',
+    meta: 'product',
+    internal: true,
+  },
+  {
+    title: 'Escrow helper',
+    description: 'Ledger escrow beside the book — settlement proofs for high-value jobs.',
+    href: `${GITHUB}/docs/product/escrow-helper.md`,
+    meta: 'book',
+    external: true,
+  },
+  {
     title: 'M2M API',
     description: 'REST task submit, status, webhooks, quotes.',
     href: `${GITHUB}/docs/M2M_API.md`,

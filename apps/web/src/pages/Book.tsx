@@ -20,6 +20,8 @@ import {
   type ModelMixItem,
   type PolicyType,
 } from '../lib/agentBook';
+import BookEscrowPanel from '../components/BookEscrowPanel';
+import PrivateSpendCallout from '../components/PrivateSpendCallout';
 import {
   clearBookCredentials,
   loadBookCredentials,
@@ -456,7 +458,12 @@ export default function Book() {
 
         {loadState === 'ready' && book && (
           <>
-            <section className="book-budget-strip">
+            <section className="book-budget-strip" style={{ alignItems: 'center' }}>
+              {book.private_spend?.enabled && (
+                <div style={{ gridColumn: '1 / -1', marginBottom: '0.25rem' }}>
+                  <PrivateSpendCallout compact />
+                </div>
+              )}
               <div className="card book-stat-card">
                 <div className="stat-label">Budget Y (cap)</div>
                 <div className="book-stat-value">{book.cap != null ? `$${formatUsdc(book.cap)}` : 'Unlimited'}</div>
@@ -481,6 +488,14 @@ export default function Book() {
                 )}
               </div>
             </section>
+
+            <PrivateSpendCallout />
+
+            <BookEscrowPanel
+              apiV1={apiV1}
+              agentId={book.agent_id}
+              session={sessionInput.trim()}
+            />
 
             {book.cap != null && (
               <div className="card" style={{ marginBottom: '1.5rem', padding: '1rem 1.25rem' }}>

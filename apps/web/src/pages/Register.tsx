@@ -188,6 +188,16 @@ export default function Register() {
                 /v1 gateway
               </Link>
             </div>
+
+            <div className="card" style={{ marginTop: '1.25rem', padding: '1rem 1.25rem' }}>
+              <span className="badge badge-purple">Private Spend</span>
+              <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', lineHeight: 1.65, marginTop: '0.65rem' }}>
+                Your possession session enables <strong>vendor_blind</strong> on inference by default.
+                Pass <code>X-XFuel-Session</code> on chat completions — providers see pooled gateway
+                traffic, not your buyer topology. <strong>Not prompt confidentiality.</strong>{' '}
+                <Link to="/docs/private-spend">Learn more →</Link>
+              </p>
+            </div>
           </section>
         )}
 

@@ -77,6 +77,11 @@ const ROUTE_CONTENT = {
     h1: 'Theoriq',
     lede: 'Swarm orchestration stays yours; Chit402 is the inference receipt book.',
   },
+  '/docs/private-spend': {
+    title: 'Private Spend | Chit402',
+    h1: 'Private Spend',
+    lede: 'vendor_blind mode for possession sessions. Providers see gateway traffic, not buyer topology. Gateway-trusted — not prompt encryption.',
+  },
   '/book': {
     title: 'Principal book — spend dashboard | Chit',
     h1: 'This agent spent Y on this job.',

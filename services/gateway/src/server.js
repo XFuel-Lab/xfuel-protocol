@@ -64,6 +64,7 @@ import { readAgentBook, claimFromRequest, bindBookVerifier, setAgentBudget, quer
 import { BookPolicyStore, POLICY_TYPES, enforcePolicy } from './book-policy.js';
 import { BookAssignmentStore, GRANT_TYPES, readSliceByToken } from './book-assign.js';
 import { BookDisputeStore, CLAIM_TYPES, OUTCOME_TYPES, fileAndAdjudicate } from './book-dispute.js';
+import { BookEscrowStore, ESCROW_ACTIONS, handleEscrowAction } from './book-escrow.js';
 import { ingestForeignX402, buildOnChainVerify, getBaseProvider } from './foreign-x402-ingest.js';
 import { aawpReaders } from './agent-wallet.js';
 import { computeUsageStats, renderStatsHtml } from './telemetry.js';
@@ -320,6 +321,7 @@ POST /v1/chat/completions is bait. A holder can prove: lineage, policy, assignme
 - GET|POST /v1/agents/:agent_id/book/assign : grant read/collect of a slice to another owner.
 - GET /v1/book/slice?token= : read a slice by assignment token (no possession needed).
 - POST /v1/agents/:agent_id/book/dispute : file a dispute. claim_type: output_missing, wrong_model, double_charge.
+- POST /v1/agents/:agent_id/book/escrow : ledger escrow helper (open|release|clawback|status). High-value jobs beside the book.
 - POST /v1/agents/:agent_id/book/rotate : rotate session. Old session invalid, book stays (tied to agent_id).
 - POST /v1/agents/:agent_id/book/ingest : record agent's arbitrary x402 spend to a foreign endpoint.
 
@@ -663,6 +665,10 @@ export function createApp() {
     persist: !!config.taskStore?.persist,
   });
   const bookDisputes = new BookDisputeStore({
+    dir: agentsDir,
+    persist: !!config.taskStore?.persist,
+  });
+  const bookEscrows = new BookEscrowStore({
     dir: agentsDir,
     persist: !!config.taskStore?.persist,
   });
@@ -3597,6 +3603,68 @@ export function createApp() {
     }
   });
 
+  // POST /v1/agents/:agent_id/book/escrow — Ledger escrow helper (possession-gated)
+  // Actions: open | release | clawback | status. Hold = collected x402 on book.
+  app.post('/v1/agents/:agent_id/book/escrow', async (req, res) => {
+    try {
+      const body = req.body || {};
+      const claim = claimFromRequest(req);
+      const apiKey = req.headers['x-api-key'] || null;
+      const isDemo = isDemoKey(apiKey);
+
+      if (isDemo) {
+        return res.status(403).json({ error: 'demo_rejected', message: 'Demo keys cannot use escrow helper' });
+      }
+
+      const session = claim.session;
+      const proof = claim.proof;
+      if (!session && !proof) {
+        return res.status(401).end();
+      }
+
+      const id = Number(req.params.agent_id);
+      const checked = verifyBook({ agentId: id, window: 50, session, proof });
+      if (!checked || checked.checked !== true || checked.valid !== true) {
+        return res.status(403).end();
+      }
+
+      const result = await handleEscrowAction({
+        action: body.action,
+        agent_id: id,
+        escrow_id: body.escrow_id,
+        task_id: body.task_id,
+        amount: body.amount,
+        expires_at: body.expires_at,
+        required: body.required,
+        claim_type: body.claim_type,
+        evidence: body.evidence || {},
+      }, {
+        store: bookEscrows,
+        ledger: usageSettled,
+        disputes: bookDisputes,
+        loadReceipt: loadReceiptJson,
+        verifyReceipt: verifyStoredReceipt,
+        baseUrl: baseUrlFromReq(req, config.service.publicBaseUrl, config.service.publicHosts),
+      });
+
+      if (!result.ok) {
+        const status = result.reason?.includes('not found') ? 404 : 400;
+        return res.status(status).json({
+          error: 'escrow_error',
+          message: result.reason,
+          existing: result.existing,
+          checks: result.checks,
+          escrow: result.escrow,
+          disclaimer: result.disclaimer,
+        });
+      }
+      return res.status(body.action === 'open' ? 201 : 200).json(result);
+    } catch (err) {
+      logger.error({ err, reqId: req.id }, 'book escrow error');
+      return res.status(500).json({ error: 'internal', message: err.message });
+    }
+  });
+
   // POST /v1/agents/:agent_id/book/rotate — Rotate session (possession sanity)
   // Old session becomes invalid. Book (entries) stays — tied to agent_id not session.
   app.post('/v1/agents/:agent_id/book/rotate', (req, res) => {
@@ -3643,7 +3711,7 @@ export function createApp() {
   app.use((_req, res) => {
     res.status(404).json({
       error: 'not_found',
-      message: 'Unknown endpoint. Available: POST /task-request, POST /task-quote, GET /prove-result, POST /a2a-message, POST /a2a-settle-fair-exchange, POST /erc8004/validate, POST /v1/agents/register, GET|POST /v1/agents/:agent_id/book, POST /v1/agents/:agent_id/book/ingest, GET /v1/agents/:agent_id/book/lineage/:task_id, GET|POST /v1/agents/:agent_id/book/policy, GET|POST /v1/agents/:agent_id/book/export, GET|POST /v1/agents/:agent_id/book/assign, DELETE /v1/agents/:agent_id/book/assign/:assignment_id, GET /v1/book/slice, GET|POST /v1/agents/:agent_id/book/dispute, POST /v1/agents/:agent_id/book/rotate, GET /task-status, GET /receipt/:taskId, GET /receipt/by-tx, POST /receipt/:taskId/session/handoff, GET /v1/sessions/:delegation_hash, POST /v1/sessions/:delegation_hash/challenge, POST /v1/sessions/:delegation_hash/act, POST /v1/sessions/revoke, PUT|GET|DELETE /webhook, GET /health, GET /stats, GET /stats/me, GET /llms.txt, GET /chit402-icon.svg, GET /.well-known/x402, GET /.well-known/x402list.txt, GET /.well-known/jwks.json, GET /.well-known/revocations, GET /.well-known/agent-card.json, GET /openapi.json, GET /v1/models, GET /v1/models/:id, GET|POST /v1/chat/completions, POST /v1/images/generations, POST /v1/audio/transcriptions',
+      message: 'Unknown endpoint. Available: POST /task-request, POST /task-quote, GET /prove-result, POST /a2a-message, POST /a2a-settle-fair-exchange, POST /erc8004/validate, POST /v1/agents/register, GET|POST /v1/agents/:agent_id/book, POST /v1/agents/:agent_id/book/ingest, GET /v1/agents/:agent_id/book/lineage/:task_id, GET|POST /v1/agents/:agent_id/book/policy, GET|POST /v1/agents/:agent_id/book/export, GET|POST /v1/agents/:agent_id/book/assign, DELETE /v1/agents/:agent_id/book/assign/:assignment_id, GET /v1/book/slice, GET|POST /v1/agents/:agent_id/book/dispute, POST /v1/agents/:agent_id/book/escrow, POST /v1/agents/:agent_id/book/rotate, GET /task-status, GET /receipt/:taskId, GET /receipt/by-tx, POST /receipt/:taskId/session/handoff, GET /v1/sessions/:delegation_hash, POST /v1/sessions/:delegation_hash/challenge, POST /v1/sessions/:delegation_hash/act, POST /v1/sessions/revoke, PUT|GET|DELETE /webhook, GET /health, GET /stats, GET /stats/me, GET /llms.txt, GET /chit402-icon.svg, GET /.well-known/x402, GET /.well-known/x402list.txt, GET /.well-known/jwks.json, GET /.well-known/revocations, GET /.well-known/agent-card.json, GET /openapi.json, GET /v1/models, GET /v1/models/:id, GET|POST /v1/chat/completions, POST /v1/images/generations, POST /v1/audio/transcriptions',
     });
   });
 

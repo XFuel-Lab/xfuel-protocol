@@ -886,7 +886,7 @@ export function buildOpenApiSpec(baseUrl = '') {
         get: {
           operationId: 'getBookPolicy',
           summary: 'Get current policy for agent',
-          description: 'Returns daily_cap, model_allowlist, kill_switch. Possession-gated.',
+          description: 'Returns daily_cap, hourly_cap, model_allowlist, kill_switch, require_payment_ref, tier2_above. Possession-gated.',
           tags: ['Agents'],
           parameters: [{ name: 'agent_id', in: 'path', required: true, schema: { type: 'integer' } }],
           responses: {
@@ -899,8 +899,9 @@ export function buildOpenApiSpec(baseUrl = '') {
           operationId: 'setBookPolicy',
           summary: 'Set policy for agent',
           description:
-            'Caps as rows. Set daily_cap (max $/day), model_allowlist (only these models), '
-            + 'or kill_switch (block all spend). Demo keys cannot write policy rows.',
+            'Caps as rows beside the book (not the router). Set daily_cap, hourly_cap (clock hour UTC), '
+            + 'model_allowlist, kill_switch, require_payment_ref, or tier2_above (USDC atomic). '
+            + 'Demo keys cannot write policy rows.',
           tags: ['Agents'],
           parameters: [{ name: 'agent_id', in: 'path', required: true, schema: { type: 'integer' } }],
           requestBody: {
@@ -910,7 +911,10 @@ export function buildOpenApiSpec(baseUrl = '') {
                 schema: {
                   type: 'object',
                   properties: {
-                    policy_type: { type: 'string', enum: ['daily_cap', 'model_allowlist', 'kill_switch'] },
+                    policy_type: {
+                      type: 'string',
+                      enum: ['daily_cap', 'hourly_cap', 'model_allowlist', 'kill_switch', 'require_payment_ref', 'tier2_above'],
+                    },
                     value: { description: 'Policy value (null to clear)' },
                   },
                 },
@@ -922,6 +926,51 @@ export function buildOpenApiSpec(baseUrl = '') {
             400: { description: 'Invalid policy type or value.' },
             401: { description: 'No possession proof.' },
             403: { description: 'Demo key or wrong proof.' },
+          },
+        },
+      },
+      '/v1/agents/{agent_id}/book/export': {
+        get: {
+          operationId: 'exportBookGet',
+          summary: 'Export book for accounting / audit',
+          description:
+            'Possession-gated export of collected rows. format=csv (default), json (audit pack), or html (print to PDF).',
+          tags: ['Agents'],
+          parameters: [
+            { name: 'agent_id', in: 'path', required: true, schema: { type: 'integer' } },
+            { name: 'format', in: 'query', schema: { type: 'string', enum: ['csv', 'json', 'html'], default: 'csv' } },
+            { name: 'limit', in: 'query', schema: { type: 'integer', maximum: 200 } },
+          ],
+          responses: {
+            200: { description: 'CSV, JSON audit pack, or print HTML.' },
+            401: { description: 'No possession proof.' },
+            403: { description: 'Wrong proof or unknown agent_id.' },
+          },
+        },
+        post: {
+          operationId: 'exportBookPost',
+          summary: 'Export book for accounting / audit (POST)',
+          description: 'Same as GET; session in body or X-XFuel-Session header.',
+          tags: ['Agents'],
+          parameters: [{ name: 'agent_id', in: 'path', required: true, schema: { type: 'integer' } }],
+          requestBody: {
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    session: { type: 'string' },
+                    format: { type: 'string', enum: ['csv', 'json', 'html'], default: 'csv' },
+                    limit: { type: 'integer', maximum: 200 },
+                  },
+                },
+              },
+            },
+          },
+          responses: {
+            200: { description: 'CSV, JSON audit pack, or print HTML.' },
+            401: { description: 'No possession proof.' },
+            403: { description: 'Wrong proof or unknown agent_id.' },
           },
         },
       },

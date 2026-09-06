@@ -6,9 +6,12 @@
  * gateway enforces them on spend. Per whitepaper lineage: A→B→inference is one chain.
  *
  * Policy types:
- *   daily_cap      — max $X / day (resets at midnight UTC)
- *   model_allowlist — only these models are allowed
- *   kill_switch    — all spend blocked when set
+ *   daily_cap           — max $X / day (resets at midnight UTC)
+ *   hourly_cap          — max $X / clock hour UTC (resets at top of each hour)
+ *   model_allowlist     — only these models are allowed
+ *   kill_switch         — all spend blocked when set
+ *   require_payment_ref — block new spend when ledger rows lack payment.ref
+ *   tier2_above         — spend at/above $X requires Tier-2 proof_tier on the request
  *
  * Policy rows are stored separately from usage rows. Possession holder writes them;
  * gateway enforces them. Demo never writes policy rows.
@@ -20,8 +23,11 @@ import logger from './logger.js';
 
 export const POLICY_TYPES = {
   DAILY_CAP: 'daily_cap',
+  HOURLY_CAP: 'hourly_cap',
   MODEL_ALLOWLIST: 'model_allowlist',
   KILL_SWITCH: 'kill_switch',
+  REQUIRE_PAYMENT_REF: 'require_payment_ref',
+  TIER2_ABOVE: 'tier2_above',
 };
 
 export class BookPolicyStore {
@@ -120,6 +126,15 @@ export class BookPolicyStore {
           return { ok: false, reason: 'invalid daily_cap value' };
         }
         policy[policyType] = { limit: cap.toString(), reset_at: nextMidnightUTC() };
+      } else if (policyType === POLICY_TYPES.HOURLY_CAP) {
+        let cap;
+        try {
+          cap = BigInt(String(value).trim());
+          if (cap < 0n) return { ok: false, reason: 'hourly_cap must be non-negative' };
+        } catch {
+          return { ok: false, reason: 'invalid hourly_cap value' };
+        }
+        policy[policyType] = { limit: cap.toString(), reset_at: nextHourUTC() };
       } else if (policyType === POLICY_TYPES.MODEL_ALLOWLIST) {
         if (!Array.isArray(value)) {
           return { ok: false, reason: 'model_allowlist must be an array' };
@@ -127,6 +142,17 @@ export class BookPolicyStore {
         policy[policyType] = value.map(String);
       } else if (policyType === POLICY_TYPES.KILL_SWITCH) {
         policy[policyType] = !!value;
+      } else if (policyType === POLICY_TYPES.REQUIRE_PAYMENT_REF) {
+        policy[policyType] = !!value;
+      } else if (policyType === POLICY_TYPES.TIER2_ABOVE) {
+        let threshold;
+        try {
+          threshold = BigInt(String(value).trim());
+          if (threshold < 0n) return { ok: false, reason: 'tier2_above must be non-negative' };
+        } catch {
+          return { ok: false, reason: 'invalid tier2_above value' };
+        }
+        policy[policyType] = { threshold: threshold.toString() };
       }
     }
 
@@ -161,12 +187,33 @@ function nextMidnightUTC() {
   return tomorrow.toISOString();
 }
 
+/** Next clock-hour boundary (UTC). Hourly caps reset here. */
+function nextHourUTC() {
+  const now = new Date();
+  const next = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+    now.getUTCHours() + 1,
+    0, 0, 0,
+  ));
+  return next.toISOString();
+}
+
+function tier2ProofRequested(proofTier) {
+  if (!proofTier) return false;
+  const t = String(proofTier).toLowerCase().trim();
+  return t === 'settlement' || t === 'inference' || t === 'tee'
+    || t === 'zk-spotcheck' || t === 'spotcheck' || t === 't3a' || t === 't3b' || t === 't3c'
+    || t === 'zk-full' || t === 'full';
+}
+
 /**
  * Enforce policy on a spend attempt. Returns { allowed: true } or { allowed: false, reason, code }.
  *
  * @param {number|string} agentId
- * @param {{ model?: string, amount?: string|bigint }} spend
- * @param {{ policy: BookPolicyStore, ledger: { sumCollectedByAgentToday?: Function, sumCollectedByAgent?: Function } }} deps
+ * @param {{ model?: string, amount?: string|bigint, proof_tier?: string|null }} spend
+ * @param {{ policy: BookPolicyStore, ledger: { sumCollectedByAgentToday?: Function, sumCollectedByAgentThisHour?: Function, hasIntegrityGapForAgent?: Function } }} deps
  */
 export function enforcePolicy(agentId, spend = {}, { policy, ledger } = {}) {
   if (!policy) return { allowed: true };
@@ -184,6 +231,44 @@ export function enforcePolicy(agentId, spend = {}, { policy, ledger } = {}) {
     const allowed = p[POLICY_TYPES.MODEL_ALLOWLIST].map(m => String(m).toLowerCase());
     if (model && !allowed.includes(model)) {
       return { allowed: false, reason: `model ${spend.model} not in allowlist`, code: 'model_not_allowed' };
+    }
+  }
+
+  if (p[POLICY_TYPES.REQUIRE_PAYMENT_REF] === true) {
+    const gap = ledger?.hasIntegrityGapForAgent?.(id);
+    if (gap?.has_gap) {
+      return {
+        allowed: false,
+        reason: 'collected row missing payment.ref — new spend paused',
+        code: 'payment_ref_required',
+        task_id: gap.task_id || null,
+      };
+    }
+  }
+
+  if (p[POLICY_TYPES.HOURLY_CAP]) {
+    const cap = p[POLICY_TYPES.HOURLY_CAP];
+    const resetAt = new Date(cap.reset_at);
+    const now = new Date();
+
+    if (now >= resetAt) {
+      cap.reset_at = nextHourUTC();
+      policy.set(id, POLICY_TYPES.HOURLY_CAP, cap.limit);
+    }
+
+    const spentHour = ledger?.sumCollectedByAgentThisHour?.(id) ?? 0n;
+    const limit = BigInt(cap.limit);
+    const spendAmount = spend.amount ? BigInt(String(spend.amount)) : 0n;
+
+    if (spentHour + spendAmount > limit) {
+      return {
+        allowed: false,
+        reason: 'hourly cap exceeded',
+        code: 'hourly_cap_exceeded',
+        spent_hour: spentHour.toString(),
+        hourly_cap: limit.toString(),
+        remaining: (limit > spentHour ? limit - spentHour : 0n).toString(),
+      };
     }
   }
 
@@ -208,7 +293,22 @@ export function enforcePolicy(agentId, spend = {}, { policy, ledger } = {}) {
         code: 'daily_cap_exceeded',
         spent_today: spentToday.toString(),
         daily_cap: limit.toString(),
-        remaining: (limit - spentToday).toString(),
+        remaining: (limit > spentToday ? limit - spentToday : 0n).toString(),
+      };
+    }
+  }
+
+  if (p[POLICY_TYPES.TIER2_ABOVE]) {
+    const tierCfg = p[POLICY_TYPES.TIER2_ABOVE];
+    const threshold = BigInt(tierCfg.threshold);
+    const spendAmount = spend.amount ? BigInt(String(spend.amount)) : 0n;
+    if (threshold > 0n && spendAmount >= threshold && !tier2ProofRequested(spend.proof_tier)) {
+      return {
+        allowed: false,
+        reason: `spend at or above ${threshold.toString()} requires proof_tier settlement or inference`,
+        code: 'tier2_required',
+        threshold: threshold.toString(),
+        amount: spendAmount.toString(),
       };
     }
   }

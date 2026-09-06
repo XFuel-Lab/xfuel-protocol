@@ -24,7 +24,7 @@ process.env.RECEIPT_SIGNING_SECRET = 'test-book-ext-secret';
 
 const { AgentRegistry } = await import('../src/agent-registry.js');
 const { UsageSettledLedger, recordCollectedSpend } = await import('../src/usage-settled.js');
-const { readAgentBook, bindBookVerifier, queryLineage } = await import('../src/agent-book.js');
+const { readAgentBook, bindBookVerifier, queryLineage, exportAgentBook, buildBookExportCsv, buildBookAuditPack } = await import('../src/agent-book.js');
 const { BookPolicyStore, POLICY_TYPES, enforcePolicy } = await import('../src/book-policy.js');
 const { BookAssignmentStore, GRANT_TYPES, filterBySlice, readSliceByToken } = await import('../src/book-assign.js');
 const { BookDisputeStore, CLAIM_TYPES, OUTCOME_TYPES, fileAndAdjudicate, recheckDispute } = await import('../src/book-dispute.js');
@@ -189,6 +189,154 @@ describe('Caps as Rows', () => {
     const policy = new BookPolicyStore();
     const check = enforcePolicy(999, { model: 'anything' }, { policy });
     assert.equal(check.allowed, true);
+  });
+
+  test('set and get policy: hourly_cap', () => {
+    const policy = new BookPolicyStore();
+    const result = policy.set(1, POLICY_TYPES.HOURLY_CAP, '50000');
+    assert.equal(result.ok, true);
+    assert.equal(result.policy.hourly_cap.limit, '50000');
+    assert.ok(result.policy.hourly_cap.reset_at);
+  });
+
+  test('enforcePolicy blocks when hourly cap exceeded', () => {
+    const policy = new BookPolicyStore();
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry();
+
+    const recorded = recordCollectedSpend(collectedReceipt({ task_id: 't1', ref: 'base:0x1', amount: '40000' }), { ledger, registry });
+    policy.set(recorded.agent_id, POLICY_TYPES.HOURLY_CAP, '50000');
+
+    const smallSpend = enforcePolicy(recorded.agent_id, { amount: '10000' }, { policy, ledger });
+    assert.equal(smallSpend.allowed, true);
+
+    const bigSpend = enforcePolicy(recorded.agent_id, { amount: '20000' }, { policy, ledger });
+    assert.equal(bigSpend.allowed, false);
+    assert.equal(bigSpend.code, 'hourly_cap_exceeded');
+  });
+
+  test('set and get policy: require_payment_ref', () => {
+    const policy = new BookPolicyStore();
+    const result = policy.set(1, POLICY_TYPES.REQUIRE_PAYMENT_REF, true);
+    assert.equal(result.ok, true);
+    assert.equal(result.policy.require_payment_ref, true);
+  });
+
+  test('enforcePolicy blocks when require_payment_ref and ledger gap', () => {
+    const policy = new BookPolicyStore();
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry();
+
+    const recorded = recordCollectedSpend(collectedReceipt({ task_id: 't1', ref: 'base:0x1' }), { ledger, registry });
+    policy.set(recorded.agent_id, POLICY_TYPES.REQUIRE_PAYMENT_REF, true);
+
+    const ok = enforcePolicy(recorded.agent_id, { amount: '10000' }, { policy, ledger });
+    assert.equal(ok.allowed, true);
+
+    ledger.entries.push({
+      task_id: 'gap-row',
+      agent_id: recorded.agent_id,
+      collected: true,
+      rail: 'usdc',
+      amount: '5000',
+      payment_ref: null,
+    });
+
+    const blocked = enforcePolicy(recorded.agent_id, { amount: '10000' }, { policy, ledger });
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.code, 'payment_ref_required');
+  });
+
+  test('set and get policy: tier2_above', () => {
+    const policy = new BookPolicyStore();
+    const result = policy.set(1, POLICY_TYPES.TIER2_ABOVE, '100000');
+    assert.equal(result.ok, true);
+    assert.equal(result.policy.tier2_above.threshold, '100000');
+  });
+
+  test('enforcePolicy blocks tier2_above without proof_tier', () => {
+    const policy = new BookPolicyStore();
+    policy.set(1, POLICY_TYPES.TIER2_ABOVE, '50000');
+
+    const blocked = enforcePolicy(1, { amount: '60000' }, { policy });
+    assert.equal(blocked.allowed, false);
+    assert.equal(blocked.code, 'tier2_required');
+
+    const allowed = enforcePolicy(1, { amount: '60000', proof_tier: 'settlement' }, { policy });
+    assert.equal(allowed.allowed, true);
+
+    const below = enforcePolicy(1, { amount: '40000' }, { policy });
+    assert.equal(below.allowed, true);
+  });
+});
+
+// ─── EXPORT TESTS ───────────────────────────────────────────────────────────────
+
+describe('Book Export', () => {
+  test('exportAgentBook returns CSV for possession holder', () => {
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry();
+    const recorded = recordCollectedSpend(collectedReceipt({
+      task_id: 'export-t1',
+      ref: 'base:0xexport1',
+      amount: '10000',
+      model: 'theta/qwen3',
+      hub: 'theta',
+    }), { ledger, registry });
+
+    const result = exportAgentBook(recorded.agent_id, { session: recorded.session, format: 'csv' }, {
+      ledger,
+      verify: bindBookVerifier(registry),
+      baseUrl: 'https://api.chit402.com',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.contentType, 'text/csv; charset=utf-8');
+    assert.match(result.body, /task_id,collected_at,hub,model,amount/);
+    assert.match(result.body, /export-t1/);
+    assert.match(result.body, /theta\/qwen3/);
+  });
+
+  test('exportAgentBook returns JSON audit pack', () => {
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry();
+    const recorded = recordCollectedSpend(collectedReceipt({ task_id: 'audit-t1', ref: 'base:0xa1' }), { ledger, registry });
+
+    const result = exportAgentBook(recorded.agent_id, { session: recorded.session, format: 'json' }, {
+      ledger,
+      verify: bindBookVerifier(registry),
+      baseUrl: 'https://api.chit402.com',
+    });
+    assert.equal(result.status, 200);
+    assert.equal(result.body.schema, 'chit402.book_audit.v1');
+    assert.equal(result.body.row_count, 1);
+    assert.equal(result.body.rows[0].task_id, 'audit-t1');
+    assert.match(result.body.rows[0].auditor_url, /format=auditor/);
+  });
+
+  test('exportAgentBook is possession-gated', () => {
+    const ledger = new UsageSettledLedger();
+    const registry = new AgentRegistry();
+    const recorded = recordCollectedSpend(collectedReceipt({ task_id: 't1', ref: 'base:0x1' }), { ledger, registry });
+
+    const unauth = exportAgentBook(recorded.agent_id, {}, { ledger, verify: bindBookVerifier(registry) });
+    assert.equal(unauth.status, 401);
+
+    const wrong = exportAgentBook(recorded.agent_id, { session: 'wrong' }, { ledger, verify: bindBookVerifier(registry) });
+    assert.equal(wrong.status, 403);
+  });
+
+  test('buildBookExportCsv escapes commas', () => {
+    const entries = [{
+      task_id: 't1',
+      payment_ref: 'base:0x1',
+      rail: 'usdc',
+      amount: '1000',
+      collected_at: '2026-08-01T00:00:00Z',
+      model: 'hub/model,with,comma',
+      hub: 'hub',
+    }];
+    const csv = buildBookExportCsv(entries, 1, 'https://api.chit402.com');
+    assert.match(csv, /"hub\/model,with,comma"/);
   });
 });
 

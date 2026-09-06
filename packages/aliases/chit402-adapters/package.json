@@ -1,6 +1,6 @@
 {
   "name": "chit402-adapters",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Chit402 framework adapters — LangChain and Vercel AI SDK helpers with verify_url extraction.",
   "type": "module",
   "main": "./index.js",
@@ -69,7 +69,7 @@
     "directory": "packages/aliases/chit402-adapters"
   },
   "dependencies": {
-    "@xfuel/adapters": "^0.1.0"
+    "@xfuel/adapters": "^0.1.1"
   },
   "peerDependencies": {
     "@ai-sdk/openai": "^1.0.0 || ^2.0.0",

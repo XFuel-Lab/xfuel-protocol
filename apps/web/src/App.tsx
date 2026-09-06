@@ -5,6 +5,11 @@ import ChitHome from './pages/ChitHome';
 import ChitIn15Lines from './pages/ChitIn15Lines';
 import Docs from './pages/Docs';
 import ElizaPlugin from './pages/ElizaPlugin';
+import FrameworkAdapters from './pages/FrameworkAdapters';
+import CloudflareDocs from './pages/CloudflareDocs';
+import OpenClawDocs from './pages/OpenClawDocs';
+import AcpDocs from './pages/AcpDocs';
+import SwarmPlatforms from './pages/SwarmPlatforms';
 import Pricing from './pages/Pricing';
 import GatewayV1 from './pages/GatewayV1';
 import NotFound from './pages/NotFound';
@@ -28,6 +33,15 @@ export default function App() {
         <Route path="/docs" element={<Docs />} />
         <Route path="/docs/chit-in-15-lines" element={<ChitIn15Lines />} />
         <Route path="/docs/eliza" element={<ElizaPlugin />} />
+        <Route path="/docs/framework-adapters" element={<FrameworkAdapters />} />
+        <Route path="/docs/langchain" element={<FrameworkAdapters />} />
+        <Route path="/docs/ai-sdk" element={<FrameworkAdapters />} />
+        <Route path="/docs/cloudflare" element={<CloudflareDocs />} />
+        <Route path="/docs/openclaw" element={<OpenClawDocs />} />
+        <Route path="/docs/acp" element={<AcpDocs />} />
+        <Route path="/docs/swarm-platforms" element={<SwarmPlatforms />} />
+        <Route path="/docs/olas" element={<SwarmPlatforms />} />
+        <Route path="/docs/theoriq" element={<SwarmPlatforms />} />
         <Route path="/pricing" element={<Pricing />} />
         <Route path="/security" element={<Security />} />
         <Route path="/v1" element={<GatewayV1 />} />

@@ -46,11 +46,43 @@ export default function ChitHome() {
             <Link to="/docs/eliza" className="btn btn-secondary">
               Eliza plugin
             </Link>
+            <Link to="/docs/framework-adapters" className="btn btn-secondary">
+              Framework adapters
+            </Link>
           </div>
         </div>
       </section>
 
-      <section style={{ padding: '3rem 0' }}>
+      <section style={{ padding: '2rem 0' }}>
+        <div className="container" style={{ maxWidth: 720 }}>
+          <h2 style={{ marginBottom: '1rem', textAlign: 'center', fontSize: '1.25rem' }}>
+            Integration doors
+          </h2>
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '0.75rem',
+              justifyContent: 'center',
+            }}
+          >
+            <Link to="/docs/cloudflare" className="btn btn-secondary btn-sm">
+              Cloudflare
+            </Link>
+            <Link to="/docs/acp" className="btn btn-secondary btn-sm">
+              Virtuals ACP
+            </Link>
+            <Link to="/docs/openclaw" className="btn btn-secondary btn-sm">
+              OpenClaw
+            </Link>
+            <Link to="/docs/swarm-platforms" className="btn btn-secondary btn-sm">
+              Olas + Theoriq
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ padding: '1rem 0 3rem' }}>
         <div className="container" style={{ maxWidth: 720 }}>
           <h2 style={{ marginBottom: '1.5rem', textAlign: 'center' }}>The receipt stays with you</h2>
           <div className="grid grid-3" style={{ gap: '1.5rem' }}>

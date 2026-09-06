@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { getApiHost, getApiV1 } from '../apiHost';
 import { getHostConfig } from '../hostConfig';
 
-const GITHUB = 'https://github.com/XFuel-Lab/xfuel-protocol/blob/main';
+const GITHUB = 'https://github.com/XFuel-Lab/chit402/blob/main';
 
 type DocLink = {
   title: string;
@@ -74,10 +74,45 @@ const builders: DocLink[] = [
     external: true,
   },
   {
+    title: 'Framework adapters',
+    description: 'LangChain + Vercel AI SDK — swap baseURL, pay USDC, hold verify_url.',
+    href: '/docs/framework-adapters',
+    meta: 'npm',
+    internal: true,
+  },
+  {
     title: 'Eliza plugin',
-    description: 'Coming: @xfuel/plugin-elizaos — USDC budget + verify_url for Eliza agents.',
+    description: '@xfuel/plugin-elizaos — USDC budget + verify_url for Eliza agents.',
     href: '/docs/eliza',
     meta: 'framework',
+    internal: true,
+  },
+  {
+    title: 'Cloudflare Agents',
+    description: 'Chit baseURL or chit402-sidecar stamp for Workers and Agents.',
+    href: '/docs/cloudflare',
+    meta: 'worker',
+    internal: true,
+  },
+  {
+    title: 'Virtuals ACP',
+    description: 'Keep ACP settle; route inference through Chit for the receipt book.',
+    href: '/docs/acp',
+    meta: 'ACP',
+    internal: true,
+  },
+  {
+    title: 'OpenClaw skill',
+    description: 'Pasteable SKILL.md — baseURL swap + USDC caps + verify_url.',
+    href: '/docs/openclaw',
+    meta: 'skill',
+    internal: true,
+  },
+  {
+    title: 'Olas + Theoriq',
+    description: 'Swarm runners — same beachhead, no deep protocol fork.',
+    href: '/docs/swarm-platforms',
+    meta: 'swarm',
     internal: true,
   },
   {
@@ -183,7 +218,7 @@ function DocSection({ title, items }: { title: string; items: DocLink[] }) {
 
 function getSnippet(apiV1: string) {
   return `curl -sS ${apiV1}/chat/completions \\
-  -H "X-API-Key: xfuel-demo" \\
+  -H "X-API-Key: chit402-demo" \\
   -H "Content-Type: application/json" \\
   -d '{"model":"xfuel/auto","messages":[{"role":"user","content":"Say hello in 5 words."}],"max_tokens":32}'`;
 }
@@ -214,10 +249,10 @@ export default function Docs() {
           <a href={`${apiHost}/health`} target="_blank" rel="noreferrer">
             API health
           </a>
-          <a href="https://github.com/XFuel-Lab/xfuel-protocol" target="_blank" rel="noreferrer">
+          <a href="https://github.com/XFuel-Lab/chit402" target="_blank" rel="noreferrer">
             GitHub
           </a>
-          <a href="https://www.npmjs.com/package/xfuel-sdk" target="_blank" rel="noreferrer">
+          <a href="https://www.npmjs.com/package/chit402-sdk" target="_blank" rel="noreferrer">
             npm SDK
           </a>
           <a href={`${GITHUB}/docs/bug-bounty.md`} target="_blank" rel="noreferrer">
@@ -235,7 +270,7 @@ export default function Docs() {
         <div className="docs-panel">
           <h2>Try the demo (no wallet)</h2>
           <p>
-            Demo key <code>xfuel-demo</code> with <code>/v1</code>. Receipt comes back on the response.
+            Demo key <code>chit402-demo</code> with <code>/v1</code>. Receipt comes back on the response.
             This does not spend USDC.
           </p>
           <pre className="docs-code">
@@ -243,7 +278,7 @@ export default function Docs() {
           </pre>
           <p style={{ marginTop: '0.75rem' }}>SDK (same door):</p>
           <pre className="docs-code">
-            <code>{`npm install xfuel-sdk
+            <code>{`npm install chit402-sdk
 # client.chatCompletions({ model: 'xfuel/auto', messages: [...] })`}</code>
           </pre>
           <p style={{ marginTop: '0.75rem', fontSize: '0.9rem', opacity: 0.85 }}>

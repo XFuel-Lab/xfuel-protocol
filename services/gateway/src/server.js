@@ -1017,24 +1017,38 @@ export function createApp() {
     next();
   });
 
-  // ── CORS (opt-in) ──────────────────────────────────────────────────────────
-  // Off by default. Set M2M_CORS_ORIGIN (e.g. '*' or a specific origin) to allow
-  // browser-based agents / playgrounds to call the API (incl. the /v1 gateway).
-  // Registered before body parsing so even 400/413/429 error responses carry
-  // CORS headers and can be read by a browser client.
-  const CORS_ORIGIN = process.env.M2M_CORS_ORIGIN;
-  if (CORS_ORIGIN) {
-    app.use((req, res, next) => {
-      res.header('Access-Control-Allow-Origin', CORS_ORIGIN);
-      res.header('Vary', 'Origin');
-      // v1 x402: X-PAYMENT, X-PAYMENT-NONCE; v2 x402: PAYMENT-SIGNATURE, PAYMENT-NONCE
-      res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-PAYMENT, X-PAYMENT-NONCE, PAYMENT-SIGNATURE, PAYMENT-NONCE');
-      res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-      res.header('Access-Control-Expose-Headers', 'X-XFuel-Signature, x-xfuel-task-id, x-xfuel-provider, x-xfuel-compute-real, x-xfuel-payment-rail, x-xfuel-proof-status, x-xfuel-proof-url, x-xfuel-verify-url, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset');
-      if (req.method === 'OPTIONS') return res.sendStatus(204);
-      next();
-    });
+  // ── CORS ───────────────────────────────────────────────────────────────────
+  // Principals' /book dashboard (www.chit402.com) POSTs to the gateway from the browser.
+  // Set M2M_CORS_ORIGIN (e.g. '*' or one origin) to override the default product allowlist.
+  // Registered before body parsing so even 400/413/429 error responses carry CORS headers.
+  const CORS_ORIGIN_ENV = process.env.M2M_CORS_ORIGIN;
+  const DEFAULT_CORS_ORIGINS = new Set([
+    'https://www.chit402.com',
+    'https://chit402.com',
+    'http://localhost:5173',
+  ]);
+  const CORS_ALLOW_HEADERS = 'Content-Type, Authorization, X-API-Key, X-PAYMENT, X-PAYMENT-NONCE, PAYMENT-SIGNATURE, PAYMENT-NONCE, X-XFuel-Session, x-xfuel-session';
+
+  function resolveCorsAllowOrigin(req) {
+    const origin = req.headers.origin;
+    if (!origin) return null;
+    if (CORS_ORIGIN_ENV === '*') return '*';
+    if (CORS_ORIGIN_ENV) return CORS_ORIGIN_ENV;
+    return DEFAULT_CORS_ORIGINS.has(origin) ? origin : null;
   }
+
+  app.use((req, res, next) => {
+    const allowOrigin = resolveCorsAllowOrigin(req);
+    if (!allowOrigin) return next();
+    res.header('Access-Control-Allow-Origin', allowOrigin);
+    res.header('Vary', 'Origin');
+    // v1 x402: X-PAYMENT, X-PAYMENT-NONCE; v2 x402: PAYMENT-SIGNATURE, PAYMENT-NONCE
+    res.header('Access-Control-Allow-Headers', CORS_ALLOW_HEADERS);
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Expose-Headers', 'X-XFuel-Signature, x-xfuel-task-id, x-xfuel-provider, x-xfuel-compute-real, x-xfuel-payment-rail, x-xfuel-proof-status, x-xfuel-proof-url, x-xfuel-verify-url, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset');
+    if (req.method === 'OPTIONS') return res.sendStatus(204);
+    next();
+  });
 
   app.use(express.json({ limit: '1mb' }));
 

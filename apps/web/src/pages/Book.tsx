@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { getApiHost, getApiV1 } from '../apiHost';
 import { getHostConfig } from '../hostConfig';
@@ -18,6 +18,7 @@ import {
 import {
   clearBookCredentials,
   loadBookCredentials,
+  resolveBookCredentials,
   saveBookCredentials,
 } from '../lib/bookStorage';
 
@@ -62,12 +63,15 @@ export default function Book() {
   const productName = config.name;
   const apiHost = getApiHost();
   const apiV1 = getApiV1();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionStrippedRef = useRef(false);
+  const autoLoadKeyRef = useRef<string | null>(null);
 
   const [agentIdInput, setAgentIdInput] = useState('');
   const [sessionInput, setSessionInput] = useState('');
   const [showSession, setShowSession] = useState(false);
   const [loadState, setLoadState] = useState<LoadState>('idle');
+  const [credentialHint, setCredentialHint] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<BookFetchError | null>(null);
   const [book, setBook] = useState<AgentBookResponse | null>(null);
   const [budgetDraft, setBudgetDraft] = useState('');
@@ -80,18 +84,34 @@ export default function Book() {
 
   useEffect(() => {
     const saved = loadBookCredentials();
-    const fromUrl = searchParams.get('agent_id') ?? '';
-    const nextAgentId = fromUrl || saved.agentId;
-    const nextSession = saved.session;
-    setAgentIdInput(nextAgentId);
-    setSessionInput(nextSession);
+    const resolved = resolveBookCredentials(
+      { agentId: searchParams.get('agent_id'), session: searchParams.get('session') },
+      saved,
+    );
+    setAgentIdInput(resolved.agentId);
+    setSessionInput(resolved.session);
 
-    const id = Number(nextAgentId.trim());
-    if (Number.isInteger(id) && id >= 1 && nextSession.trim()) {
+    if (resolved.agentId.trim() && resolved.session.trim()) {
+      saveBookCredentials({ agentId: resolved.agentId.trim(), session: resolved.session.trim() });
+    }
+
+    if (resolved.sessionFromUrl && !sessionStrippedRef.current) {
+      sessionStrippedRef.current = true;
+      const next = new URLSearchParams(searchParams);
+      next.delete('session');
+      setSearchParams(next, { replace: true });
+    }
+
+    const id = Number(resolved.agentId.trim());
+    const session = resolved.session.trim();
+    const loadKey = `${id}:${session}`;
+    if (Number.isInteger(id) && id >= 1 && session && autoLoadKeyRef.current !== loadKey) {
+      autoLoadKeyRef.current = loadKey;
       void (async () => {
         setLoadState('loading');
         setFetchError(null);
-        const result = await fetchAgentBook(apiV1, { agentId: id, session: nextSession.trim(), limit: 50 });
+        setCredentialHint(null);
+        const result = await fetchAgentBook(apiV1, { agentId: id, session, limit: 50 });
         if (!result.ok) {
           setBook(null);
           setFetchError(result.error);
@@ -105,7 +125,7 @@ export default function Book() {
         }
       })();
     }
-  }, [apiV1, searchParams]);
+  }, [apiV1, searchParams, setSearchParams]);
 
   const loadBook = useCallback(async (opts?: { budget?: string | null }) => {
     const agentId = Number(agentIdInput.trim());
@@ -114,9 +134,17 @@ export default function Book() {
       setLoadState('idle');
       setBook(null);
       setFetchError(null);
+      if (!session.trim()) {
+        setCredentialHint('Paste the possession session from POST /v1/agents/register.');
+      } else if (!Number.isInteger(agentId) || agentId < 1) {
+        setCredentialHint('Enter a valid agent_id (positive integer from register).');
+      } else {
+        setCredentialHint('Enter agent_id and session to load the book.');
+      }
       return;
     }
 
+    setCredentialHint(null);
     saveBookCredentials({ agentId: String(agentId), session });
     setLoadState('loading');
     setFetchError(null);
@@ -227,7 +255,10 @@ export default function Book() {
                 step={1}
                 placeholder="e.g. 7"
                 value={agentIdInput}
-                onChange={(e) => setAgentIdInput(e.target.value)}
+                onChange={(e) => {
+                  setAgentIdInput(e.target.value);
+                  setCredentialHint(null);
+                }}
                 autoComplete="off"
               />
             </label>
@@ -239,7 +270,10 @@ export default function Book() {
                   type={showSession ? 'text' : 'password'}
                   placeholder="from register response"
                   value={sessionInput}
-                  onChange={(e) => setSessionInput(e.target.value)}
+                  onChange={(e) => {
+                    setSessionInput(e.target.value);
+                    setCredentialHint(null);
+                  }}
                   autoComplete="off"
                   spellCheck={false}
                 />
@@ -266,15 +300,21 @@ export default function Book() {
                   setBook(null);
                   setLoadState('idle');
                   setFetchError(null);
+                  setCredentialHint(null);
                 }}
               >
                 Clear
               </button>
             </div>
+            {credentialHint && (
+              <p className="book-credential-hint" role="alert">
+                {credentialHint}
+              </p>
+            )}
           </form>
         </section>
 
-        {!hasCredentials && loadState === 'idle' && (
+        {!hasCredentials && loadState === 'idle' && !credentialHint && (
           <section className="card book-state-card">
             <span className="badge badge-purple">No possession</span>
             <h3 style={{ marginTop: '0.75rem' }}>You get nothing without the session</h3>

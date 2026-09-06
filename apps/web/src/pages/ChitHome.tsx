@@ -20,15 +20,21 @@ export default function ChitHome() {
             Give an agent a USDC budget. Keep the receipt when the wallet moves.
           </p>
           <p style={styles.heroDescription}>
-            The product is the book — hub, model, amount — not a router.
-            <code>POST /v1/chat/completions</code> returns a signed receipt with{' '}
+            Principals: pay once, register, then hold the book — hub, model, amount — not a router
+            dashboard. <code>POST /v1/chat/completions</code> returns a signed receipt with{' '}
             <code>verify_url</code>. Cost-plus, quoted, receipted — USDC on Base and Solana.
             Wire: <code>api.chit402.com/v1</code>.
           </p>
           <div style={styles.heroCta}>
+            <Link to="/book" className="btn btn-primary">
+              Open the book
+            </Link>
+            <Link to="/register" className="btn btn-primary">
+              Register agent
+            </Link>
             <a
               href={LIVE_RECEIPT}
-              className="btn btn-primary"
+              className="btn btn-secondary"
               target="_blank"
               rel="noreferrer"
             >

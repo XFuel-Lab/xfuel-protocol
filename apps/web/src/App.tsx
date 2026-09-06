@@ -12,6 +12,7 @@ import Security from './pages/Security';
 import AgentShop from './pages/AgentShop';
 import Book from './pages/Book';
 import BookBot from './pages/BookBot';
+import Register from './pages/Register';
 import { isChitHost } from './hostConfig';
 
 function HomePage() {
@@ -33,6 +34,7 @@ export default function App() {
         <Route path="/v1/*" element={<GatewayV1 />} />
         <Route path="/agent-shop" element={<AgentShop />} />
         <Route path="/book" element={<Book />} />
+        <Route path="/register" element={<Register />} />
         <Route path="/book-bot" element={<BookBot />} />
         {/* Catch-all: branded 404 for ALL unknown paths including gated legacy pages. */}
         <Route path="*" element={<NotFound />} />

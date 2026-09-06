@@ -64,7 +64,7 @@ import { readAgentBook, claimFromRequest, bindBookVerifier, setAgentBudget, quer
 import { BookPolicyStore, POLICY_TYPES, enforcePolicy } from './book-policy.js';
 import { BookAssignmentStore, GRANT_TYPES, readSliceByToken } from './book-assign.js';
 import { BookDisputeStore, CLAIM_TYPES, OUTCOME_TYPES, fileAndAdjudicate } from './book-dispute.js';
-import { BookEscrowStore, ESCROW_ACTIONS, handleEscrowAction } from './book-escrow.js';
+import { BookEscrowStore, handleEscrowAction } from './book-escrow.js';
 import { ingestForeignX402, buildOnChainVerify, getBaseProvider } from './foreign-x402-ingest.js';
 import { aawpReaders } from './agent-wallet.js';
 import { computeUsageStats, renderStatsHtml } from './telemetry.js';

@@ -151,10 +151,11 @@ test('buildOpenApiSpec: x402scan document lists chat first with x-payment-info',
     '/v1/agents/{agent_id}/book/assign/{assignment_id}',
     '/v1/book/slice',
     '/v1/agents/{agent_id}/book/dispute',
+    '/v1/agents/{agent_id}/book/escrow',
     '/v1/agents/{agent_id}/book/rotate',
     '/receipt/{taskId}',
     '/receipt/by-tx',
-  ], 'chat completions is the public door; responses is the same floor; a2a is same floor; task-request is M2M; register is identity; book is possession-gated; ingest is foreign x402; lineage/policy/assign/dispute/rotate are book extensions; receipt endpoints are public verification');
+  ], 'chat completions is the public door; responses is the same floor; a2a is same floor; task-request is M2M; register is identity; book is possession-gated; ingest is foreign x402; lineage/policy/assign/dispute/escrow/rotate are book extensions; receipt endpoints are public verification');
   assert.equal(spec.paths['/v1/agents/register'].post['x-payment-info'], undefined,
     'register is not the paid door');
   assert.equal(spec.paths['/v1/agents/{agent_id}/book'].post['x-payment-info'], undefined,
@@ -162,6 +163,8 @@ test('buildOpenApiSpec: x402scan document lists chat first with x-payment-info',
   assert.equal(spec.paths['/v1/agents/{agent_id}/book'].get['x-payment-info'], undefined);
   assert.equal(spec.paths['/v1/agents/{agent_id}/book/ingest'].post['x-payment-info'], undefined,
     'ingest is not the paid door');
+  assert.equal(spec.paths['/v1/agents/{agent_id}/book/escrow'].post['x-payment-info'], undefined,
+    'escrow is not the paid door');
 
   const chat = spec.paths['/v1/chat/completions'].post;
   const a2a = spec.paths['/a2a-message'].post;
